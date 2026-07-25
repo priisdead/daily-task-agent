@@ -172,6 +172,25 @@ def tasks_done_today(today_prefix: str) -> list:
             " ORDER BY updated_at DESC", (today_prefix + "%",))]
 
 
+def all_tasks(limit: int = 500) -> list:
+    with get_db() as db:
+        return [dict(r) for r in db.execute(
+            "SELECT * FROM tasks ORDER BY id DESC LIMIT ?", (limit,))]
+
+
+def all_wa_messages(limit: int = 500) -> list:
+    with get_db() as db:
+        return [dict(r) for r in db.execute(
+            "SELECT * FROM wa_messages ORDER BY id DESC LIMIT ?", (limit,))]
+
+
+def all_emails(limit: int = 500) -> list:
+    with get_db() as db:
+        return [dict(r) for r in db.execute(
+            "SELECT id, gmail_id, account, sender, subject, snippet, ts, processed"
+            " FROM emails ORDER BY id DESC LIMIT ?", (limit,))]
+
+
 def last_run() -> dict | None:
     with get_db() as db:
         row = db.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 1").fetchone()

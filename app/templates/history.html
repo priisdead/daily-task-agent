@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>History</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1a1d21; --muted: #6b7280;
+    --line: #e5e7eb; --accent: #0f766e; --high: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111417; --card: #1a1f24; --ink: #e7e9ec; --muted: #9aa3ad;
+      --line: #2a3138; --accent: #2dd4bf; --high: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 28px 16px 64px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 15px; margin: 34px 0 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .04em; }
+  .btn {
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    border-radius: 8px; padding: 7px 14px; font-size: 13px; text-decoration: none;
+  }
+  table {
+    width: 100%; border-collapse: collapse; background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line);
+    vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .status-open  { color: var(--accent); font-weight: 600; }
+  .status-done  { color: var(--muted); }
+  .muted { color: var(--muted); font-size: 12.5px; }
+  .count { color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>History</h1>
+    <a class="btn" href="/?token={{ token }}">&larr; Back to Today&rsquo;s Tasks</a>
+  </header>
+
+  <h2>All tasks <span class="count">({{ tasks|length }})</span></h2>
+  <table>
+    <tr><th>#</th><th>Client</th><th>Request</th><th>Deadline</th><th>Channel</th><th>Status</th><th>Created</th></tr>
+    {% for t in tasks %}
+    <tr>
+      <td>{{ t.id }}</td>
+      <td>{{ t.client }}<div class="muted">{{ t.contact }}</div></td>
+      <td>{{ t.request }}{% if t.source %}<div class="muted">&ldquo;{{ t.source }}&rdquo;</div>{% endif %}</td>
+      <td>{{ t.deadline or "—" }}</td>
+      <td>{{ t.channel }}</td>
+      <td class="status-{{ t.status }}">{{ t.status }}</td>
+      <td class="muted">{{ t.created_at[:16].replace('T',' ') }}</td>
+    </tr>
+    {% endfor %}
+    {% if not tasks %}<tr><td colspan="7" class="muted">Nothing yet.</td></tr>{% endif %}
+  </table>
+
+  <h2>All WhatsApp messages <span class="count">({{ wa_messages|length }})</span></h2>
+  <table>
+    <tr><th>When</th><th>From</th><th>Message</th><th>Type</th></tr>
+    {% for m in wa_messages %}
+    <tr>
+      <td class="muted">{{ m.ts[:16].replace('T',' ') }}</td>
+      <td>{{ m.sender_name or m.sender }}<div class="muted">{{ m.sender }}</div></td>
+      <td>{{ m.body }}</td>
+      <td class="muted">{{ m.msg_type }}</td>
+    </tr>
+    {% endfor %}
+    {% if not wa_messages %}<tr><td colspan="4" class="muted">Nothing yet.</td></tr>{% endif %}
+  </table>
+
+  <h2>All emails <span class="count">({{ emails|length }})</span></h2>
+  <table>
+    <tr><th>When</th><th>Inbox</th><th>From</th><th>Subject / preview</th></tr>
+    {% for e in emails %}
+    <tr>
+      <td class="muted">{{ e.ts[:22] }}</td>
+      <td class="muted">{{ e.account }}</td>
+      <td>{{ e.sender }}</td>
+      <td>{{ e.subject or "(no subject)" }}<div class="muted">{{ e.snippet }}</div></td>
+    </tr>
+    {% endfor %}
+    {% if not emails %}<tr><td colspan="4" class="muted">Nothing yet.</td></tr>{% endif %}
+  </table>
+</div>
+</body>
+</html>

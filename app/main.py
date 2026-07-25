@@ -100,6 +100,22 @@ async def dashboard(request: Request, token: str = Query("")):
     )
 
 
+@app.get("/history", response_class=HTMLResponse)
+async def history(request: Request, token: str = Query("")):
+    """Full archive: every task, WhatsApp message, and email ever received."""
+    _check_token(token)
+    return templates.TemplateResponse(
+        request,
+        "history.html",
+        {
+            "token": token,
+            "tasks": db.all_tasks(),
+            "wa_messages": db.all_wa_messages(),
+            "emails": db.all_emails(),
+        },
+    )
+
+
 @app.post("/tasks/{task_id}/done")
 async def task_done(task_id: int, token: str = Query("")):
     _check_token(token)
