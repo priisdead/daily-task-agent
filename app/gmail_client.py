@@ -73,6 +73,8 @@ def _fetch_account(token_file: str, query: str | None = None, max_pages: int = 1
         body = _extract_body(msg.get("payload", {}))[:8000]
         sender = headers.get("from", "")
         sender_addr = (re.findall(r"[\w.+-]+@[\w.-]+", sender) or [""])[0].lower()
+        if any(pat in sender.lower() for pat in config.IGNORE_SENDERS):
+            continue  # automated/noise sender — don't store at all
         direction = (
             "outgoing"
             if "SENT" in msg.get("labelIds", []) or sender_addr in config.OWNER_EMAILS

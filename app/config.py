@@ -41,6 +41,18 @@ OWNER_EMAILS = [
     if e.strip()
 ]
 
+# Senders to ignore completely (substring match, case-insensitive). Extend via
+# the IGNORE_SENDERS env var (comma-separated) — e.g. "linkedin.com,quora.com"
+_DEFAULT_IGNORES = (
+    "noreply,no-reply,no_reply,donotreply,do-not-reply,mailer-daemon,"
+    "postmaster@,notifications@,newsletter@,mail-noreply@google.com"
+)
+IGNORE_SENDERS = [
+    s.strip().lower()
+    for s in (_DEFAULT_IGNORES + "," + os.getenv("IGNORE_SENDERS", "")).split(",")
+    if s.strip()
+]
+
 # App
 DASHBOARD_TOKEN = os.getenv("DASHBOARD_TOKEN", "")
 # Postgres connection string (e.g. from Neon). When set, all data lives there

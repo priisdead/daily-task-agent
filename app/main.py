@@ -76,23 +76,34 @@ def _check_token(token: str) -> None:
         raise HTTPException(status_code=401, detail="invalid or missing ?token=")
 
 
+def _matches(t: dict, q: str) -> bool:
+    hay = f"{t.get('client','')} {t.get('contact','')} {t.get('request','')}".lower()
+    return q in hay
+
+
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, token: str = Query("")):
+async def dashboard(request: Request, token: str = Query(""), q: str = Query("")):
     _check_token(token)
     tz = ZoneInfo(config.TIMEZONE)
     today = datetime.now(tz)
+    query = q.strip().lower()
     tasks = db.open_tasks()
-    by_client: dict[str, list] = {}
-    for t in tasks:
-        by_client.setdefault(t["client"] or "Unknown", []).append(t)
     done_today = db.tasks_done_today(datetime.utcnow().date().isoformat())
     active_ids = {t["id"] for t in tasks} | {t["id"] for t in done_today}
     archive = [t for t in db.all_tasks() if t["id"] not in active_ids]
+    if query:
+        tasks = [t for t in tasks if _matches(t, query)]
+        done_today = [t for t in done_today if _matches(t, query)]
+        archive = [t for t in archive if _matches(t, query)]
+    by_client: dict[str, list] = {}
+    for t in tasks:
+        by_client.setdefault(t["client"] or "Unknown", []).append(t)
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         {
             "token": token,
+            "q": q.strip(),
             "date_str": today.strftime("%A, %d %B %Y"),
             "by_client": by_client,
             "open_count": sum(1 for t in tasks if t["status"] == "open"),

@@ -83,13 +83,18 @@ def _format_context(open_task_list, wa_msgs, emails) -> str:
     return "\n".join(parts)
 
 
+def _empty(failed: bool = False) -> dict:
+    return {"new_tasks": [], "resolved_task_ids": [],
+            "in_progress_task_ids": [], "failed": failed}
+
+
 def _call_claude(context: str) -> str:
     import anthropic
 
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     resp = client.messages.create(
         model=config.ANTHROPIC_MODEL,
-        max_tokens=4000,
+        max_tokens=8000,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": context}],
     )
@@ -108,7 +113,7 @@ def _call_gemini(context: str) -> str:
             "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
             "contents": [{"role": "user", "parts": [{"text": context}]}],
             "generationConfig": {
-                "maxOutputTokens": 4000,
+                "maxOutputTokens": 16000,
                 "responseMimeType": "application/json",
             },
         },
@@ -120,15 +125,20 @@ def _call_gemini(context: str) -> str:
 
 
 def extract_tasks(open_task_list, wa_msgs, emails) -> dict:
-    """Call the configured LLM; return {"new_tasks": [...], "resolved_task_ids": [...]}"""
+    """Call the configured LLM; always returns a dict with new_tasks,
+    resolved_task_ids, in_progress_task_ids, failed."""
     if not wa_msgs and not emails:
-        return {"new_tasks": [], "resolved_task_ids": []}
+        return _empty()
 
     context = _format_context(open_task_list, wa_msgs, emails)
-    if config.LLM_PROVIDER == "gemini":
-        text = _call_gemini(context)
-    else:
-        text = _call_claude(context)
+    try:
+        if config.LLM_PROVIDER == "gemini":
+            text = _call_gemini(context)
+        else:
+            text = _call_claude(context)
+    except Exception:
+        log.exception("%s API call failed", config.LLM_PROVIDER)
+        return _empty(failed=True)
     # tolerate accidental code fences
     if text.startswith("```"):
         text = text.strip("`")
@@ -137,10 +147,11 @@ def extract_tasks(open_task_list, wa_msgs, emails) -> dict:
         data = json.loads(text[text.find("{"): text.rfind("}") + 1])
     except (ValueError, json.JSONDecodeError):
         log.error("%s returned unparseable output: %.500s", config.LLM_PROVIDER, text)
-        return {"new_tasks": [], "resolved_task_ids": []}
+        return _empty(failed=True)
     data.setdefault("new_tasks", [])
     data.setdefault("resolved_task_ids", [])
     data.setdefault("in_progress_task_ids", [])
+    data["failed"] = False
     return data
 
 
@@ -157,8 +168,41 @@ def _apply(result: dict, open_task_list: list) -> None:
             db.set_task_status(tid, "done")
 
 
-def run_digest() -> dict:
-    """The hourly job: pull email, gather unprocessed messages, extract tasks."""
+BATCH = 30          # messages per AI call — safe for response-size limits
+MAX_BATCHES = 40    # safety valve per run
+
+
+def _process_batches() -> tuple[int, int, int]:
+    """Run extraction over everything unprocessed, in chronological batches.
+    A failed batch (API error / truncated output) is NOT marked processed —
+    it stays queued and is retried on the next scan. Returns totals
+    (wa, emails, new_tasks)."""
+    total_wa = total_em = total_new = batches = 0
+    while batches < MAX_BATCHES:
+        emails = db.unprocessed_emails()[:BATCH]
+        wa_msgs = db.unprocessed_wa_messages()[:BATCH]
+        if not emails and not wa_msgs:
+            break
+        open_task_list = db.open_tasks()
+        result = extract_tasks(open_task_list, wa_msgs, emails)
+        if result["failed"]:
+            log.error("batch failed — leaving %d emails / %d WA msgs queued for retry",
+                      len(emails), len(wa_msgs))
+            break
+        _apply(result, open_task_list)
+        db.mark_processed("emails", [e["id"] for e in emails])
+        db.mark_processed("wa_messages", [m["id"] for m in wa_msgs])
+        total_em += len(emails)
+        total_wa += len(wa_msgs)
+        total_new += len(result["new_tasks"])
+        batches += 1
+        log.info("batch %d: %d emails, %d WA so far -> %d new tasks",
+                 batches, total_em, total_wa, total_new)
+    return total_wa, total_em, total_new
+
+
+def run_digest() -> None:
+    """The recurring job: pull mail, then extract tasks in safe batches."""
     from . import gmail_client  # local import so webhook can run without Gmail set up
 
     started = db.utcnow()
@@ -167,32 +211,15 @@ def run_digest() -> dict:
     except Exception:
         log.exception("gmail fetch failed — continuing with WhatsApp only")
 
-    wa_msgs = db.unprocessed_wa_messages()
-    emails = db.unprocessed_emails()
-    open_task_list = db.open_tasks()
-
-    result = extract_tasks(open_task_list, wa_msgs, emails)
-    _apply(result, open_task_list)
-
-    db.mark_processed("wa_messages", [m["id"] for m in wa_msgs])
-    db.mark_processed("emails", [e["id"] for e in emails])
-    db.record_run(started, len(wa_msgs), len(emails), len(result["new_tasks"]))
-
-    log.info(
-        "digest: %d WA msgs, %d emails -> %d new tasks, %d resolved",
-        len(wa_msgs), len(emails),
-        len(result["new_tasks"]), len(result["resolved_task_ids"]),
-    )
-    return result
-
-
-BACKFILL_BATCH = 40
+    wa, em, new = _process_batches()
+    db.record_run(started, wa, em, new)
+    log.info("digest: %d WA msgs, %d emails -> %d new tasks", wa, em, new)
 
 
 def run_backfill(days: int = 30) -> None:
     """One-time seed: fetch up to `days` of mail history across all inboxes,
-    then extract tasks in chronological batches (oldest first) so the AI sees
-    conversations unfold in order and closes what got resolved."""
+    then extract tasks chronologically so the AI sees conversations unfold
+    in order and closes what got resolved."""
     from . import gmail_client
 
     started = db.utcnow()
@@ -203,25 +230,6 @@ def run_backfill(days: int = 30) -> None:
     except Exception:
         log.exception("backfill: gmail fetch failed")
 
-    total_new, total_emails, batches = 0, 0, 0
-    while True:
-        emails = db.unprocessed_emails()[:BACKFILL_BATCH]
-        wa_msgs = db.unprocessed_wa_messages()[:BACKFILL_BATCH]
-        if not emails and not wa_msgs:
-            break
-        open_task_list = db.open_tasks()
-        result = extract_tasks(open_task_list, wa_msgs, emails)
-        _apply(result, open_task_list)
-        db.mark_processed("emails", [e["id"] for e in emails])
-        db.mark_processed("wa_messages", [m["id"] for m in wa_msgs])
-        total_new += len(result["new_tasks"])
-        total_emails += len(emails)
-        batches += 1
-        log.info("backfill: batch %d done (%d emails, %d new tasks so far)",
-                 batches, total_emails, total_new)
-        if batches >= 25:  # safety valve
-            log.warning("backfill: stopping after 25 batches")
-            break
-
-    db.record_run(started, 0, total_emails, total_new, note=f"backfill {days}d")
-    log.info("backfill complete: %d emails -> %d tasks", total_emails, total_new)
+    wa, em, new = _process_batches()
+    db.record_run(started, wa, em, new, note=f"backfill {days}d")
+    log.info("backfill complete: %d emails -> %d tasks", em, new)
