@@ -132,6 +132,20 @@ async def history_redirect(token: str = Query("")):
     return RedirectResponse(url=f"/mails?token={token}", status_code=302)
 
 
+@app.get("/backfill", response_class=HTMLResponse)
+async def backfill(token: str = Query(""), days: int = Query(30, ge=1, le=90)):
+    """One-time seeding from past mail. Runs in the background."""
+    _check_token(token)
+    asyncio.get_running_loop().run_in_executor(None, extractor.run_backfill, days)
+    return HTMLResponse(
+        f"<body style='font-family:sans-serif;padding:40px'>"
+        f"<h3>Backfill started — reading the last {days} days of mail.</h3>"
+        f"<p>This runs in the background and can take a few minutes "
+        f"(batched AI processing). Refresh the <a href='/?token={token}'>Tasks page</a> "
+        f"to watch tasks appear.</p></body>"
+    )
+
+
 @app.post("/tasks/{task_id}/done")
 async def task_done(task_id: int, token: str = Query("")):
     _check_token(token)

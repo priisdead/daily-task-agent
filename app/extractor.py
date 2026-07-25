@@ -144,8 +144,21 @@ def extract_tasks(open_task_list, wa_msgs, emails) -> dict:
     return data
 
 
+def _apply(result: dict, open_task_list: list) -> None:
+    """Write an extraction result to the database."""
+    for t in result["new_tasks"]:
+        db.add_task(t)
+    valid_ids = {t["id"] for t in open_task_list}
+    for tid in result["in_progress_task_ids"]:
+        if isinstance(tid, int) and tid in valid_ids:
+            db.set_task_status(tid, "in_progress")
+    for tid in result["resolved_task_ids"]:
+        if isinstance(tid, int) and tid in valid_ids:
+            db.set_task_status(tid, "done")
+
+
 def run_digest() -> dict:
-    """The daily job: pull email, gather unprocessed messages, extract tasks."""
+    """The hourly job: pull email, gather unprocessed messages, extract tasks."""
     from . import gmail_client  # local import so webhook can run without Gmail set up
 
     started = db.utcnow()
@@ -159,16 +172,7 @@ def run_digest() -> dict:
     open_task_list = db.open_tasks()
 
     result = extract_tasks(open_task_list, wa_msgs, emails)
-
-    for t in result["new_tasks"]:
-        db.add_task(t)
-    valid_ids = {t["id"] for t in open_task_list}
-    for tid in result["in_progress_task_ids"]:
-        if isinstance(tid, int) and tid in valid_ids:
-            db.set_task_status(tid, "in_progress")
-    for tid in result["resolved_task_ids"]:
-        if isinstance(tid, int) and tid in valid_ids:
-            db.set_task_status(tid, "done")
+    _apply(result, open_task_list)
 
     db.mark_processed("wa_messages", [m["id"] for m in wa_msgs])
     db.mark_processed("emails", [e["id"] for e in emails])
@@ -180,3 +184,44 @@ def run_digest() -> dict:
         len(result["new_tasks"]), len(result["resolved_task_ids"]),
     )
     return result
+
+
+BACKFILL_BATCH = 40
+
+
+def run_backfill(days: int = 30) -> None:
+    """One-time seed: fetch up to `days` of mail history across all inboxes,
+    then extract tasks in chronological batches (oldest first) so the AI sees
+    conversations unfold in order and closes what got resolved."""
+    from . import gmail_client
+
+    started = db.utcnow()
+    query = f"newer_than:{days}d (in:inbox OR in:sent) -category:{{promotions social}}"
+    try:
+        fetched = gmail_client.fetch_recent_emails(query=query, max_pages=5)
+        log.info("backfill: fetched %d emails from last %d days", fetched, days)
+    except Exception:
+        log.exception("backfill: gmail fetch failed")
+
+    total_new, total_emails, batches = 0, 0, 0
+    while True:
+        emails = db.unprocessed_emails()[:BACKFILL_BATCH]
+        wa_msgs = db.unprocessed_wa_messages()[:BACKFILL_BATCH]
+        if not emails and not wa_msgs:
+            break
+        open_task_list = db.open_tasks()
+        result = extract_tasks(open_task_list, wa_msgs, emails)
+        _apply(result, open_task_list)
+        db.mark_processed("emails", [e["id"] for e in emails])
+        db.mark_processed("wa_messages", [m["id"] for m in wa_msgs])
+        total_new += len(result["new_tasks"])
+        total_emails += len(emails)
+        batches += 1
+        log.info("backfill: batch %d done (%d emails, %d new tasks so far)",
+                 batches, total_emails, total_new)
+        if batches >= 25:  # safety valve
+            log.warning("backfill: stopping after 25 batches")
+            break
+
+    db.record_run(started, 0, total_emails, total_new, note=f"backfill {days}d")
+    log.info("backfill complete: %d emails -> %d tasks", total_emails, total_new)

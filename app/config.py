@@ -32,6 +32,14 @@ GMAIL_QUERY = os.getenv(
     "GMAIL_QUERY",
     "newer_than:1d (in:inbox OR in:sent) -category:{promotions social}",
 )
+# Your own sending addresses (comma-separated). Mail FROM any of these is
+# treated as YOUR reply (moves tasks to in-progress/done) even when it arrives
+# via forwarding/BCC into a hub inbox.
+OWNER_EMAILS = [
+    e.strip().lower()
+    for e in os.getenv("OWNER_EMAILS", "").split(",")
+    if e.strip()
+]
 
 # App
 DASHBOARD_TOKEN = os.getenv("DASHBOARD_TOKEN", "")

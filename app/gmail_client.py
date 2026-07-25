@@ -3,6 +3,7 @@
 scripts/gmail_auth.py and GMAIL_TOKEN_FILES in .env."""
 import base64
 import logging
+import re
 from pathlib import Path
 
 from google.auth.transport.requests import Request
@@ -46,15 +47,22 @@ def _extract_body(payload: dict) -> str:
     return ""
 
 
-def _fetch_account(token_file: str) -> int:
-    """Fetch new mail for a single account. Returns count stored."""
+def _fetch_account(token_file: str, query: str | None = None, max_pages: int = 1) -> int:
+    """Fetch mail for a single account. Returns count stored."""
     service = build("gmail", "v1", credentials=_credentials(token_file), cache_discovery=False)
     account = service.users().getProfile(userId="me").execute().get("emailAddress", token_file)
-    resp = service.users().messages().list(
-        userId="me", q=config.GMAIL_QUERY, maxResults=100
-    ).execute()
+    refs, page_token = [], None
+    for _ in range(max_pages):
+        resp = service.users().messages().list(
+            userId="me", q=query or config.GMAIL_QUERY, maxResults=100,
+            pageToken=page_token,
+        ).execute()
+        refs += resp.get("messages", [])
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
     stored = 0
-    for ref in resp.get("messages", []):
+    for ref in refs:
         msg = service.users().messages().get(
             userId="me", id=ref["id"], format="full"
         ).execute()
@@ -63,11 +71,23 @@ def _fetch_account(token_file: str) -> int:
             for h in msg.get("payload", {}).get("headers", [])
         }
         body = _extract_body(msg.get("payload", {}))[:8000]
-        direction = "outgoing" if "SENT" in msg.get("labelIds", []) else "incoming"
+        sender = headers.get("from", "")
+        sender_addr = (re.findall(r"[\w.+-]+@[\w.-]+", sender) or [""])[0].lower()
+        direction = (
+            "outgoing"
+            if "SENT" in msg.get("labelIds", []) or sender_addr in config.OWNER_EMAILS
+            else "incoming"
+        )
+        # Group by the address the mail was originally sent to (so a hub inbox
+        # receiving forwards still shows mail under the original business
+        # address). Falls back to the connected account.
+        to_addr = (re.findall(r"[\w.+-]+@[\w.-]+",
+                              headers.get("delivered-to", "") or headers.get("to", ""))
+                   or [account])[0].lower()
         if db.save_email(
             gmail_id=msg["id"],
-            account=account,
-            sender=headers.get("from", ""),
+            account=to_addr if direction == "incoming" else account,
+            sender=sender,
             subject=headers.get("subject", ""),
             snippet=msg.get("snippet", ""),
             body=body,
@@ -79,13 +99,13 @@ def _fetch_account(token_file: str) -> int:
     return stored
 
 
-def fetch_recent_emails() -> int:
-    """Fetch new mail across ALL configured accounts. One account failing
+def fetch_recent_emails(query: str | None = None, max_pages: int = 1) -> int:
+    """Fetch mail across ALL configured accounts. One account failing
     (expired token, network) never blocks the others."""
     total = 0
     for token_file in config.GMAIL_TOKEN_FILES:
         try:
-            total += _fetch_account(token_file)
+            total += _fetch_account(token_file, query=query, max_pages=max_pages)
         except Exception:
             log.exception("gmail fetch failed for %s — continuing", token_file)
     return total
