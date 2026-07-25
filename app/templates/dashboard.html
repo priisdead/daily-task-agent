@@ -3,103 +3,123 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Today's Tasks</title>
+<title>Today — Task Agent</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap');
   :root {
-    --bg: #f6f7f9; --card: #ffffff; --ink: #1a1d21; --muted: #6b7280;
-    --line: #e5e7eb; --accent: #0f766e; --high: #b91c1c; --low: #6b7280;
-    --done: #9ca3af;
+    --bg: #FAF9F7; --surface: #FFFFFF; --ink: #1B1D1F; --ink-2: #5C6166;
+    --ink-3: #9AA0A6; --line: #ECEAE6; --accent: #14634E; --accent-ink: #0E4A3A;
+    --amber: #9A5B00; --red: #B3261E; --done: #AEB4BA;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #111417; --card: #1a1f24; --ink: #e7e9ec; --muted: #9aa3ad;
-      --line: #2a3138; --accent: #2dd4bf; --high: #f87171;
+      --bg: #121416; --surface: #1A1D20; --ink: #ECEDEE; --ink-2: #A6ACB2;
+      --ink-3: #6E7479; --line: #2A2E32; --accent: #3ECF9A; --accent-ink: #7ADFBB;
+      --amber: #E8A94C; --red: #F2887F; --done: #5C6166;
     }
   }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 15px/1.55 -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
-  }
-  .wrap { max-width: 780px; margin: 0 auto; padding: 28px 16px 64px; }
-  header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-  h1 { font-size: 22px; margin: 0; }
-  .date { color: var(--muted); font-size: 14px; }
-  .meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
-  .toolbar { margin: 18px 0 26px; display: flex; gap: 10px; align-items: center; }
-  .btn {
-    border: 1px solid var(--line); background: var(--card); color: var(--ink);
-    border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer;
-  }
-  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .client { margin: 22px 0 8px; font-size: 13px; font-weight: 600;
-    letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
-  .card {
-    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-    padding: 14px 16px; margin-bottom: 10px; display: flex; gap: 12px; align-items: flex-start;
-  }
-  .card form { margin: 0; }
-  .request { font-weight: 500; }
-  .detail { color: var(--muted); font-size: 13px; margin-top: 3px; }
-  .badge {
-    display: inline-block; font-size: 11px; border-radius: 999px;
-    padding: 1px 9px; margin-left: 8px; vertical-align: 1px;
-    border: 1px solid var(--line); color: var(--muted);
-  }
-  .badge.high { color: var(--high); border-color: var(--high); font-weight: 600; }
-  .badge.progress { color: #b45309; border-color: #b45309; font-weight: 600; }
-  .badge.channel { text-transform: capitalize; }
-  .source { font-size: 12.5px; color: var(--muted); font-style: italic; margin-top: 5px; }
-  .grow { flex: 1; }
-  .done-section { margin-top: 36px; }
-  .done-card { opacity: .6; }
-  .done-card .request { text-decoration: line-through; color: var(--done); }
-  .empty {
-    text-align: center; padding: 56px 20px; color: var(--muted);
-    background: var(--card); border: 1px dashed var(--line); border-radius: 12px;
-  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--ink);
+    font: 400 15px/1.6 "Inter", -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 20px 80px; }
+
+  .topbar { display: flex; justify-content: space-between; align-items: center;
+    padding: 26px 0 0; }
+  .brand { font: 600 13px/1 "Inter"; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-3); }
+  .actions { display: flex; gap: 8px; }
+  .btn { font: 500 13px/1 "Inter"; color: var(--ink-2); background: none;
+    border: 1px solid var(--line); border-radius: 100px; padding: 9px 16px;
+    cursor: pointer; text-decoration: none; transition: all .15s; }
+  .btn:hover { border-color: var(--ink-3); color: var(--ink); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { opacity: .9; }
+
+  h1 { font: 600 34px/1.15 "Fraunces", Georgia, serif; letter-spacing: -.01em;
+    margin-top: 40px; }
+  .date { color: var(--ink-2); margin-top: 6px; font-size: 14px; }
+
+  .stats { display: flex; gap: 36px; margin: 30px 0 8px; padding: 20px 0;
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .stat .n { font: 600 26px/1 "Inter"; letter-spacing: -.02em; }
+  .stat .l { font-size: 12px; color: var(--ink-3); margin-top: 5px; }
+  .stat.amber .n { color: var(--amber); }
+  .scanline { font-size: 12px; color: var(--ink-3); margin: 10px 0 0; }
+
+  .client { font: 600 12px/1 "Inter"; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-3); margin: 38px 0 4px; }
+  .task { display: flex; align-items: flex-start; gap: 14px;
+    padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .dot { flex: none; width: 8px; height: 8px; border-radius: 50%;
+    margin-top: 8px; background: var(--accent); }
+  .dot.progress { background: var(--amber); }
+  .grow { flex: 1; min-width: 0; }
+  .req { font-weight: 500; }
+  .meta { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
+  .meta b { color: var(--ink); font-weight: 600; }
+  .tag { font-size: 12px; color: var(--ink-3); }
+  .tag.progress { color: var(--amber); font-weight: 500; }
+  .tag.high { color: var(--red); font-weight: 500; }
+  .src { font-size: 13px; color: var(--ink-3); font-style: italic; margin-top: 6px; }
+  .task form { margin-top: 2px; }
+
+  .empty { margin: 60px 0; text-align: center; color: var(--ink-3); font-size: 14px; }
+  .empty .big { font: 600 20px/1.4 "Fraunces", Georgia, serif; color: var(--ink-2);
+    margin-bottom: 6px; }
+
+  .done-h { margin-top: 48px; }
+  .done .req { color: var(--done); text-decoration: line-through; font-weight: 400; }
+  .done .dot { background: var(--done); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1>Today&rsquo;s Tasks</h1>
-    <span class="date">{{ date_str }}</span>
-  </header>
-  <div class="meta">
-    {{ open_count }} open task{{ '' if open_count == 1 else 's' }}
-    {% if last_run %} &middot; last scan: {{ last_run.finished_at[:16].replace('T', ' ') }} UTC
-    ({{ last_run.wa_count }} WhatsApp, {{ last_run.email_count }} email){% endif %}
+  <div class="topbar">
+    <span class="brand">Task Agent</span>
+    <div class="actions">
+      <a class="btn" href="/history?token={{ token }}">History</a>
+      <form method="post" action="/run-now?token={{ token }}" style="margin:0">
+        <button class="btn primary" type="submit">Scan now</button>
+      </form>
+    </div>
   </div>
 
-  <div class="toolbar">
-    <form method="post" action="/run-now?token={{ token }}">
-      <button class="btn btn-primary" type="submit">Scan now</button>
-    </form>
-    <a class="btn" href="/?token={{ token }}" style="text-decoration:none">Refresh</a>
-    <a class="btn" href="/history?token={{ token }}" style="text-decoration:none">History</a>
-  </div>
+  <h1>Today</h1>
+  <div class="date">{{ date_str }}</div>
 
-  {% if open_count == 0 %}
-    <div class="empty">Nothing open. Either it&rsquo;s a quiet day &mdash; or hit &ldquo;Scan now&rdquo;.</div>
+  <div class="stats">
+    <div class="stat"><div class="n">{{ open_count }}</div><div class="l">Open</div></div>
+    <div class="stat amber"><div class="n">{{ progress_count }}</div><div class="l">In progress</div></div>
+    <div class="stat"><div class="n">{{ done_today|length }}</div><div class="l">Done today</div></div>
+  </div>
+  {% if last_run %}
+  <div class="scanline">Last scan {{ last_run.finished_at[:16].replace('T',' ') }} UTC
+    &middot; {{ last_run.wa_count }} WhatsApp &middot; {{ last_run.email_count }} email
+    &middot; {{ last_run.new_tasks }} new task{{ '' if last_run.new_tasks == 1 else 's' }}</div>
+  {% endif %}
+
+  {% if open_count + progress_count == 0 %}
+    <div class="empty">
+      <div class="big">All clear.</div>
+      Nothing needs your attention — or hit Scan now to check.
+    </div>
   {% endif %}
 
   {% for client, tasks in by_client.items() %}
     <div class="client">{{ client }}</div>
     {% for t in tasks %}
-      <div class="card">
+      <div class="task">
+        <span class="dot{% if t.status == 'in_progress' %} progress{% endif %}"></span>
         <div class="grow">
-          <div class="request">
-            {{ t.request }}
-            {% if t.priority == 'high' %}<span class="badge high">high</span>{% endif %}
-            {% if t.status == 'in_progress' %}<span class="badge progress">in progress</span>{% endif %}
-            <span class="badge channel">{{ t.channel }}</span>
+          <div class="req">{{ t.request }}</div>
+          <div class="meta">
+            {% if t.deadline %}Due <b>{{ t.deadline }}</b> &middot; {% endif %}
+            <span class="tag">{{ t.channel }}</span>
+            {% if t.status == 'in_progress' %} &middot; <span class="tag progress">in progress</span>{% endif %}
+            {% if t.priority == 'high' %} &middot; <span class="tag high">high priority</span>{% endif %}
           </div>
-          <div class="detail">
-            {% if t.deadline %}Due: <strong>{{ t.deadline }}</strong> &middot; {% endif %}
-            {{ t.contact }}
-          </div>
-          {% if t.source %}<div class="source">&ldquo;{{ t.source }}&rdquo;</div>{% endif %}
+          {% if t.source %}<div class="src">&ldquo;{{ t.source }}&rdquo;</div>{% endif %}
         </div>
         <form method="post" action="/tasks/{{ t.id }}/done?token={{ token }}">
           <button class="btn" type="submit">Done</button>
@@ -109,20 +129,19 @@
   {% endfor %}
 
   {% if done_today %}
-  <div class="done-section">
-    <div class="client">Completed today</div>
-    {% for t in done_today %}
-      <div class="card done-card">
-        <div class="grow">
-          <div class="request">{{ t.request }}</div>
-          <div class="detail">{{ t.client }}</div>
-        </div>
-        <form method="post" action="/tasks/{{ t.id }}/reopen?token={{ token }}">
-          <button class="btn" type="submit">Reopen</button>
-        </form>
+  <div class="client done-h">Completed today</div>
+  {% for t in done_today %}
+    <div class="task done">
+      <span class="dot"></span>
+      <div class="grow">
+        <div class="req">{{ t.request }}</div>
+        <div class="meta">{{ t.client }}</div>
       </div>
-    {% endfor %}
-  </div>
+      <form method="post" action="/tasks/{{ t.id }}/reopen?token={{ token }}">
+        <button class="btn" type="submit">Reopen</button>
+      </form>
+    </div>
+  {% endfor %}
   {% endif %}
 </div>
 </body>

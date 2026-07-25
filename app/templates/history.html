@@ -3,97 +3,115 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>History</title>
+<title>History — Task Agent</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap');
   :root {
-    --bg: #f6f7f9; --card: #ffffff; --ink: #1a1d21; --muted: #6b7280;
-    --line: #e5e7eb; --accent: #0f766e; --high: #b91c1c;
+    --bg: #FAF9F7; --surface: #FFFFFF; --ink: #1B1D1F; --ink-2: #5C6166;
+    --ink-3: #9AA0A6; --line: #ECEAE6; --accent: #14634E;
+    --amber: #9A5B00; --red: #B3261E;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #111417; --card: #1a1f24; --ink: #e7e9ec; --muted: #9aa3ad;
-      --line: #2a3138; --accent: #2dd4bf; --high: #f87171;
+      --bg: #121416; --surface: #1A1D20; --ink: #ECEDEE; --ink-2: #A6ACB2;
+      --ink-3: #6E7479; --line: #2A2E32; --accent: #3ECF9A;
+      --amber: #E8A94C; --red: #F2887F;
     }
   }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
-  }
-  .wrap { max-width: 1000px; margin: 0 auto; padding: 28px 16px 64px; }
-  header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-  h1 { font-size: 22px; margin: 0; }
-  h2 { font-size: 15px; margin: 34px 0 10px; color: var(--muted);
-    text-transform: uppercase; letter-spacing: .04em; }
-  .btn {
-    border: 1px solid var(--line); background: var(--card); color: var(--ink);
-    border-radius: 8px; padding: 7px 14px; font-size: 13px; text-decoration: none;
-  }
-  table {
-    width: 100%; border-collapse: collapse; background: var(--card);
-    border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
-  }
-  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line);
-    vertical-align: top; }
-  th { font-size: 12px; color: var(--muted); font-weight: 600; }
-  tr:last-child td { border-bottom: none; }
-  .status-open  { color: var(--accent); font-weight: 600; }
-  .status-done  { color: var(--muted); }
-  .muted { color: var(--muted); font-size: 12.5px; }
-  .count { color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--ink);
+    font: 400 14px/1.55 "Inter", -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px 80px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center;
+    padding: 26px 0 0; }
+  .brand { font: 600 13px/1 "Inter"; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-3); }
+  .btn { font: 500 13px/1 "Inter"; color: var(--ink-2); background: none;
+    border: 1px solid var(--line); border-radius: 100px; padding: 9px 16px;
+    cursor: pointer; text-decoration: none; }
+  .btn:hover { border-color: var(--ink-3); color: var(--ink); }
+  h1 { font: 600 34px/1.15 "Fraunces", Georgia, serif; margin-top: 40px; }
+
+  .nav { display: flex; gap: 8px; margin: 22px 0 6px; flex-wrap: wrap; }
+  .nav a { font-size: 13px; color: var(--ink-2); text-decoration: none;
+    border: 1px solid var(--line); border-radius: 100px; padding: 6px 14px; }
+  .nav a:hover { color: var(--ink); border-color: var(--ink-3); }
+
+  h2 { font: 600 12px/1 "Inter"; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-3); margin: 44px 0 6px; }
+  h2 .count { color: var(--ink-3); font-weight: 400; letter-spacing: 0; }
+
+  .row { display: flex; gap: 14px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+  .when { flex: none; width: 118px; color: var(--ink-3); font-size: 12.5px; padding-top: 2px; }
+  .grow { flex: 1; min-width: 0; }
+  .who { font-weight: 600; }
+  .what { color: var(--ink-2); margin-top: 1px; overflow-wrap: anywhere; }
+  .sub { color: var(--ink-3); font-size: 12.5px; margin-top: 2px; }
+  .pill { flex: none; align-self: flex-start; font-size: 11.5px; padding: 3px 10px;
+    border-radius: 100px; border: 1px solid var(--line); color: var(--ink-3); }
+  .pill.open { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .pill.in_progress { color: var(--amber); border-color: var(--amber); font-weight: 600; }
+  .pill.reply { color: var(--accent); border-color: var(--line); }
+  .none { padding: 14px 0; color: var(--ink-3); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1>History</h1>
-    <a class="btn" href="/?token={{ token }}">&larr; Back to Today&rsquo;s Tasks</a>
-  </header>
+  <div class="topbar">
+    <span class="brand">Task Agent &middot; History</span>
+    <a class="btn" href="/?token={{ token }}">&larr; Today&rsquo;s tasks</a>
+  </div>
 
-  <h2>All tasks <span class="count">({{ tasks|length }})</span></h2>
-  <table>
-    <tr><th>#</th><th>Client</th><th>Request</th><th>Deadline</th><th>Channel</th><th>Status</th><th>Created</th></tr>
-    {% for t in tasks %}
-    <tr>
-      <td>{{ t.id }}</td>
-      <td>{{ t.client }}<div class="muted">{{ t.contact }}</div></td>
-      <td>{{ t.request }}{% if t.source %}<div class="muted">&ldquo;{{ t.source }}&rdquo;</div>{% endif %}</td>
-      <td>{{ t.deadline or "—" }}</td>
-      <td>{{ t.channel }}</td>
-      <td class="status-{{ t.status }}">{{ t.status }}</td>
-      <td class="muted">{{ t.created_at[:16].replace('T',' ') }}</td>
-    </tr>
-    {% endfor %}
-    {% if not tasks %}<tr><td colspan="7" class="muted">Nothing yet.</td></tr>{% endif %}
-  </table>
+  <h1>Everything, kept.</h1>
 
-  <h2>All WhatsApp messages <span class="count">({{ wa_messages|length }})</span></h2>
-  <table>
-    <tr><th>When</th><th>From</th><th>Message</th><th>Type</th></tr>
-    {% for m in wa_messages %}
-    <tr>
-      <td class="muted">{{ m.ts[:16].replace('T',' ') }}</td>
-      <td>{{ m.sender_name or m.sender }}<div class="muted">{{ m.sender }}</div></td>
-      <td>{{ m.body }}</td>
-      <td class="muted">{{ m.msg_type }}</td>
-    </tr>
-    {% endfor %}
-    {% if not wa_messages %}<tr><td colspan="4" class="muted">Nothing yet.</td></tr>{% endif %}
-  </table>
+  <div class="nav">
+    <a href="#tasks">Tasks</a>
+    <a href="#whatsapp">WhatsApp</a>
+    {% for inbox in emails_by_inbox %}<a href="#inbox-{{ loop.index }}">{{ inbox }}</a>{% endfor %}
+  </div>
 
-  <h2>All emails <span class="count">({{ emails|length }})</span></h2>
-  <table>
-    <tr><th>When</th><th>Inbox</th><th>From</th><th>Subject / preview</th></tr>
-    {% for e in emails %}
-    <tr>
-      <td class="muted">{{ e.ts[:22] }}</td>
-      <td class="muted">{{ e.account }}</td>
-      <td>{{ e.sender }}</td>
-      <td>{{ e.subject or "(no subject)" }}<div class="muted">{{ e.snippet }}</div></td>
-    </tr>
+  <h2 id="tasks">All tasks <span class="count">· {{ tasks|length }}</span></h2>
+  {% for t in tasks %}
+  <div class="row">
+    <div class="when">{{ t.created_at[:16].replace('T',' ') }}</div>
+    <div class="grow">
+      <div class="who">{{ t.client }}</div>
+      <div class="what">{{ t.request }}</div>
+      <div class="sub">{{ t.channel }}{% if t.deadline %} &middot; due {{ t.deadline }}{% endif %}{% if t.source %} &middot; &ldquo;{{ t.source }}&rdquo;{% endif %}</div>
+    </div>
+    <span class="pill {{ t.status }}">{{ t.status.replace('_',' ') }}</span>
+  </div>
+  {% else %}<div class="none">Nothing yet.</div>{% endfor %}
+
+  <h2 id="whatsapp">WhatsApp <span class="count">· {{ wa_messages|length }}</span></h2>
+  {% for m in wa_messages %}
+  <div class="row">
+    <div class="when">{{ m.ts[:16].replace('T',' ') }}</div>
+    <div class="grow">
+      <div class="who">{{ m.sender_name or m.sender }}</div>
+      <div class="what">{{ m.body }}</div>
+      <div class="sub">{{ m.sender }} &middot; {{ m.msg_type }}</div>
+    </div>
+  </div>
+  {% else %}<div class="none">Nothing yet — WhatsApp connects in the next phase.</div>{% endfor %}
+
+  {% for inbox, mails in emails_by_inbox.items() %}
+  <h2 id="inbox-{{ loop.index }}">{{ inbox }} <span class="count">· {{ mails|length }}</span></h2>
+    {% for e in mails %}
+    <div class="row">
+      <div class="when">{{ e.ts[:22] }}</div>
+      <div class="grow">
+        <div class="who">{{ e.sender }}</div>
+        <div class="what">{{ e.subject or "(no subject)" }}</div>
+        <div class="sub">{{ e.snippet }}</div>
+      </div>
+      {% if e.direction == 'outgoing' %}<span class="pill reply">your reply</span>{% endif %}
+    </div>
     {% endfor %}
-    {% if not emails %}<tr><td colspan="4" class="muted">Nothing yet.</td></tr>{% endif %}
-  </table>
+  {% else %}
+  <h2>Emails</h2><div class="none">Nothing yet.</div>
+  {% endfor %}
 </div>
 </body>
 </html>

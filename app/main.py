@@ -93,7 +93,8 @@ async def dashboard(request: Request, token: str = Query("")):
             "token": token,
             "date_str": today.strftime("%A, %d %B %Y"),
             "by_client": by_client,
-            "open_count": len(tasks),
+            "open_count": sum(1 for t in tasks if t["status"] == "open"),
+            "progress_count": sum(1 for t in tasks if t["status"] == "in_progress"),
             "done_today": done_today,
             "last_run": db.last_run(),
         },
@@ -104,6 +105,10 @@ async def dashboard(request: Request, token: str = Query("")):
 async def history(request: Request, token: str = Query("")):
     """Full archive: every task, WhatsApp message, and email ever received."""
     _check_token(token)
+    emails = db.all_emails()
+    by_inbox: dict[str, list] = {}
+    for e in emails:
+        by_inbox.setdefault(e.get("account") or "unknown inbox", []).append(e)
     return templates.TemplateResponse(
         request,
         "history.html",
@@ -111,7 +116,7 @@ async def history(request: Request, token: str = Query("")):
             "token": token,
             "tasks": db.all_tasks(),
             "wa_messages": db.all_wa_messages(),
-            "emails": db.all_emails(),
+            "emails_by_inbox": by_inbox,
         },
     )
 
