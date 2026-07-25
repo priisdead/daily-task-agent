@@ -26,7 +26,12 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 # Gmail
-GMAIL_QUERY = os.getenv("GMAIL_QUERY", "in:inbox newer_than:1d -category:{promotions social}")
+# Scans BOTH received mail and your sent replies (so task status can update
+# automatically when you reply to a client).
+GMAIL_QUERY = os.getenv(
+    "GMAIL_QUERY",
+    "newer_than:1d (in:inbox OR in:sent) -category:{promotions social}",
+)
 
 # App
 DASHBOARD_TOKEN = os.getenv("DASHBOARD_TOKEN", "")

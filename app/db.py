@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS emails (
     id          {_ID},
     gmail_id    TEXT UNIQUE,
     account     TEXT,
+    direction   TEXT DEFAULT 'incoming',
     sender      TEXT,
     subject     TEXT,
     snippet     TEXT,
@@ -96,6 +97,12 @@ def init_db() -> None:
             db.execute(SCHEMA)
         else:
             db.executescript(SCHEMA)
+    # migration for databases created before the 'direction' column existed
+    try:
+        with get_db() as db:
+            db.execute("ALTER TABLE emails ADD COLUMN direction TEXT DEFAULT 'incoming'")
+    except Exception:
+        pass  # column already there
 
 
 def _rows(result) -> list:
@@ -119,16 +126,18 @@ def save_wa_message(wa_id, sender, sender_name, body, msg_type, media_path, ts) 
         return cur.rowcount > 0
 
 
-def save_email(gmail_id, account, sender, subject, snippet, body, ts) -> bool:
+def save_email(gmail_id, account, sender, subject, snippet, body, ts,
+               direction="incoming") -> bool:
     sql = (
-        "INSERT INTO emails (gmail_id, account, sender, subject, snippet, body, ts)"
-        " VALUES (?,?,?,?,?,?,?)"
+        "INSERT INTO emails (gmail_id, account, direction, sender, subject, snippet,"
+        " body, ts) VALUES (?,?,?,?,?,?,?,?)"
     )
     sql += " ON CONFLICT (gmail_id) DO NOTHING" if IS_PG else ""
     if not IS_PG:
         sql = sql.replace("INSERT INTO", "INSERT OR IGNORE INTO")
     with get_db() as db:
-        cur = db.execute(_q(sql), (gmail_id, account, sender, subject, snippet, body, ts))
+        cur = db.execute(_q(sql), (gmail_id, account, direction, sender, subject,
+                                   snippet, body, ts))
         return cur.rowcount > 0
 
 
@@ -187,9 +196,11 @@ def unprocessed_emails() -> list:
 
 
 def open_tasks() -> list:
+    """Everything still needing attention: open + in-progress."""
     with get_db() as db:
         return _rows(db.execute(
-            "SELECT * FROM tasks WHERE status = 'open' ORDER BY client, id"))
+            "SELECT * FROM tasks WHERE status IN ('open', 'in_progress')"
+            " ORDER BY client, id"))
 
 
 def tasks_done_today(today_prefix: str) -> list:
@@ -213,8 +224,8 @@ def all_wa_messages(limit: int = 500) -> list:
 def all_emails(limit: int = 500) -> list:
     with get_db() as db:
         return _rows(db.execute(
-            _q("SELECT id, gmail_id, account, sender, subject, snippet, ts, processed"
-               " FROM emails ORDER BY id DESC LIMIT ?"), (limit,)))
+            _q("SELECT id, gmail_id, account, direction, sender, subject, snippet, ts,"
+               " processed FROM emails ORDER BY id DESC LIMIT ?"), (limit,)))
 
 
 def last_run() -> dict | None:

@@ -47,6 +47,7 @@
     border: 1px solid var(--line); color: var(--muted);
   }
   .badge.high { color: var(--high); border-color: var(--high); font-weight: 600; }
+  .badge.progress { color: #b45309; border-color: #b45309; font-weight: 600; }
   .badge.channel { text-transform: capitalize; }
   .source { font-size: 12.5px; color: var(--muted); font-style: italic; margin-top: 5px; }
   .grow { flex: 1; }
@@ -91,6 +92,7 @@
           <div class="request">
             {{ t.request }}
             {% if t.priority == 'high' %}<span class="badge high">high</span>{% endif %}
+            {% if t.status == 'in_progress' %}<span class="badge progress">in progress</span>{% endif %}
             <span class="badge channel">{{ t.channel }}</span>
           </div>
           <div class="detail">

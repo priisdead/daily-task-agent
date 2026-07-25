@@ -63,6 +63,7 @@ def _fetch_account(token_file: str) -> int:
             for h in msg.get("payload", {}).get("headers", [])
         }
         body = _extract_body(msg.get("payload", {}))[:8000]
+        direction = "outgoing" if "SENT" in msg.get("labelIds", []) else "incoming"
         if db.save_email(
             gmail_id=msg["id"],
             account=account,
@@ -71,6 +72,7 @@ def _fetch_account(token_file: str) -> int:
             snippet=msg.get("snippet", ""),
             body=body,
             ts=headers.get("date", ""),
+            direction=direction,
         ):
             stored += 1
     log.info("gmail[%s]: stored %d new emails", account, stored)

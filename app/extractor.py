@@ -9,8 +9,10 @@ from . import config, db
 log = logging.getLogger("extractor")
 
 SYSTEM_PROMPT = """You are a task-extraction engine for a business that receives \
-client requests over WhatsApp and email. You are given (1) the currently open \
-task list, (2) new WhatsApp messages, and (3) new emails.
+client requests over WhatsApp and email. You are given (1) the current task \
+list (open and in-progress), (2) new WhatsApp messages, and (3) new emails. \
+Emails marked [YOUR REPLY] were sent BY the business owner; everything else \
+came FROM clients.
 
 Return ONLY a JSON object, no prose, with this exact shape:
 {
@@ -25,16 +27,22 @@ Return ONLY a JSON object, no prose, with this exact shape:
       "source": "short quote (max 25 words) from the originating message"
     }
   ],
-  "resolved_task_ids": [integers — IDs of OPEN tasks that the new messages show are already completed, cancelled, or no longer needed]
+  "in_progress_task_ids": [integers — task IDs the owner has ACKNOWLEDGED or committed to (e.g. replied "ok, will send it", "working on it", "sure, by Monday")],
+  "resolved_task_ids": [integers — task IDs that are COMPLETED, cancelled, or superseded (e.g. owner replied "sent", "dispatched", "done", or client withdrew the request)]
 }
 
 Rules:
 - Only extract genuine, actionable client requests. Greetings, acknowledgements,
   thanks, marketing mail, and newsletters produce NO tasks.
+- The owner's own replies ([YOUR REPLY]) NEVER create new tasks — they only
+  move existing tasks to in-progress or resolved.
+- An acknowledgement ("ok I will send it") = in_progress_task_ids. A completion
+  ("sent it today", "dispatched") = resolved_task_ids. When ambiguous, prefer
+  in_progress.
 - If a client asks about the same thing on both WhatsApp and email, create ONE
   task and mention both in "source".
-- If a new message is an update to an existing open task (e.g. changed quantity
-  or new deadline), create a new task capturing the latest state and put the old
+- If a new message is an update to an existing task (e.g. changed quantity or
+  new deadline), create a new task capturing the latest state and put the old
   task's ID in resolved_task_ids.
 - Never invent deadlines. Keep the client's own wording for dates ("Friday",
   "by month end").
@@ -43,11 +51,11 @@ Rules:
 
 
 def _format_context(open_task_list, wa_msgs, emails) -> str:
-    parts = ["## CURRENTLY OPEN TASKS"]
+    parts = ["## CURRENT TASKS (open / in-progress)"]
     if open_task_list:
         for t in open_task_list:
             parts.append(
-                f"- id={t['id']} | {t['client']} | {t['request']} "
+                f"- id={t['id']} [{t['status']}] | {t['client']} | {t['request']} "
                 f"| deadline: {t['deadline'] or '—'}"
             )
     else:
@@ -64,8 +72,9 @@ def _format_context(open_task_list, wa_msgs, emails) -> str:
     parts.append("\n## NEW EMAILS")
     if emails:
         for e in emails:
+            tag = "[YOUR REPLY] " if e.get("direction") == "outgoing" else ""
             parts.append(
-                f"[{e['ts']}] To inbox: {e.get('account', '')}\nFrom: {e['sender']}\n"
+                f"{tag}[{e['ts']}] Inbox: {e.get('account', '')}\nFrom: {e['sender']}\n"
                 f"Subject: {e['subject']}\n"
                 f"{(e['body'] or e['snippet'])[:2000]}\n---"
             )
@@ -131,6 +140,7 @@ def extract_tasks(open_task_list, wa_msgs, emails) -> dict:
         return {"new_tasks": [], "resolved_task_ids": []}
     data.setdefault("new_tasks", [])
     data.setdefault("resolved_task_ids", [])
+    data.setdefault("in_progress_task_ids", [])
     return data
 
 
@@ -153,6 +163,9 @@ def run_digest() -> dict:
     for t in result["new_tasks"]:
         db.add_task(t)
     valid_ids = {t["id"] for t in open_task_list}
+    for tid in result["in_progress_task_ids"]:
+        if isinstance(tid, int) and tid in valid_ids:
+            db.set_task_status(tid, "in_progress")
     for tid in result["resolved_task_ids"]:
         if isinstance(tid, int) and tid in valid_ids:
             db.set_task_status(tid, "done")
