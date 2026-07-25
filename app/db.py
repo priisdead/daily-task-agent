@@ -1,28 +1,38 @@
-"""SQLite storage: raw messages (WhatsApp + email) and extracted tasks."""
-import sqlite3
+"""Storage layer. Uses Postgres when DATABASE_URL is set (e.g. a free Neon
+database — data survives restarts/redeploys), otherwise a local SQLite file."""
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from . import config
 
-SCHEMA = """
+IS_PG = bool(config.DATABASE_URL)
+
+if IS_PG:
+    import psycopg
+    from psycopg.rows import dict_row
+else:
+    import sqlite3
+
+_ID = "SERIAL PRIMARY KEY" if IS_PG else "INTEGER PRIMARY KEY AUTOINCREMENT"
+
+SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS wa_messages (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    wa_id       TEXT UNIQUE,          -- Meta message id (dedup on webhook retries)
-    sender      TEXT,                 -- phone number
-    sender_name TEXT,                 -- WhatsApp profile name
+    id          {_ID},
+    wa_id       TEXT UNIQUE,
+    sender      TEXT,
+    sender_name TEXT,
     body        TEXT,
-    msg_type    TEXT,                 -- text / image / document / audio / ...
+    msg_type    TEXT,
     media_path  TEXT,
-    ts          TEXT,                 -- ISO timestamp of the message
+    ts          TEXT,
     received_at TEXT,
-    processed   INTEGER DEFAULT 0     -- 1 once a digest run has consumed it
+    processed   INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS emails (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          {_ID},
     gmail_id    TEXT UNIQUE,
-    account     TEXT,                 -- which of your inboxes received it
+    account     TEXT,
     sender      TEXT,
     subject     TEXT,
     snippet     TEXT,
@@ -32,21 +42,21 @@ CREATE TABLE IF NOT EXISTS emails (
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    client      TEXT,                 -- client name (best known)
-    contact     TEXT,                 -- phone or email address
-    channel     TEXT,                 -- whatsapp / email / both
-    request     TEXT,                 -- what the client needs
-    deadline    TEXT,                 -- free-text deadline ("Friday", "2026-07-30", or "")
-    priority    TEXT,                 -- high / normal / low
-    source      TEXT,                 -- short excerpt of the originating message(s)
-    status      TEXT DEFAULT 'open',  -- open / done / dropped
+    id          {_ID},
+    client      TEXT,
+    contact     TEXT,
+    channel     TEXT,
+    request     TEXT,
+    deadline    TEXT,
+    priority    TEXT,
+    source      TEXT,
+    status      TEXT DEFAULT 'open',
     created_at  TEXT,
     updated_at  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS runs (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          {_ID},
     started_at  TEXT,
     finished_at TEXT,
     wa_count    INTEGER,
@@ -61,10 +71,18 @@ def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _q(sql: str) -> str:
+    """Translate '?' placeholders to '%s' for Postgres."""
+    return sql.replace("?", "%s") if IS_PG else sql
+
+
 @contextmanager
 def get_db():
-    conn = sqlite3.connect(config.DATABASE_PATH)
-    conn.row_factory = sqlite3.Row
+    if IS_PG:
+        conn = psycopg.connect(config.DATABASE_URL, row_factory=dict_row)
+    else:
+        conn = sqlite3.connect(config.DATABASE_PATH)
+        conn.row_factory = sqlite3.Row
     try:
         yield conn
         conn.commit()
@@ -74,44 +92,53 @@ def get_db():
 
 def init_db() -> None:
     with get_db() as db:
-        db.executescript(SCHEMA)
+        if IS_PG:
+            db.execute(SCHEMA)
+        else:
+            db.executescript(SCHEMA)
+
+
+def _rows(result) -> list:
+    return [dict(r) for r in result.fetchall()]
 
 
 # ── writes ────────────────────────────────────────────────────────────────────
 
 def save_wa_message(wa_id, sender, sender_name, body, msg_type, media_path, ts) -> bool:
     """Insert a WhatsApp message; returns False if it was a duplicate delivery."""
+    sql = (
+        "INSERT INTO wa_messages (wa_id, sender, sender_name, body, msg_type,"
+        " media_path, ts, received_at) VALUES (?,?,?,?,?,?,?,?)"
+    )
+    sql += " ON CONFLICT (wa_id) DO NOTHING" if IS_PG else ""
+    if not IS_PG:
+        sql = sql.replace("INSERT INTO", "INSERT OR IGNORE INTO")
     with get_db() as db:
-        try:
-            db.execute(
-                "INSERT INTO wa_messages (wa_id, sender, sender_name, body, msg_type,"
-                " media_path, ts, received_at) VALUES (?,?,?,?,?,?,?,?)",
-                (wa_id, sender, sender_name, body, msg_type, media_path, ts, utcnow()),
-            )
-            return True
-        except sqlite3.IntegrityError:
-            return False
+        cur = db.execute(_q(sql), (wa_id, sender, sender_name, body, msg_type,
+                                   media_path, ts, utcnow()))
+        return cur.rowcount > 0
 
 
 def save_email(gmail_id, account, sender, subject, snippet, body, ts) -> bool:
+    sql = (
+        "INSERT INTO emails (gmail_id, account, sender, subject, snippet, body, ts)"
+        " VALUES (?,?,?,?,?,?,?)"
+    )
+    sql += " ON CONFLICT (gmail_id) DO NOTHING" if IS_PG else ""
+    if not IS_PG:
+        sql = sql.replace("INSERT INTO", "INSERT OR IGNORE INTO")
     with get_db() as db:
-        try:
-            db.execute(
-                "INSERT INTO emails (gmail_id, account, sender, subject, snippet, body, ts)"
-                " VALUES (?,?,?,?,?,?,?)",
-                (gmail_id, account, sender, subject, snippet, body, ts),
-            )
-            return True
-        except sqlite3.IntegrityError:
-            return False
+        cur = db.execute(_q(sql), (gmail_id, account, sender, subject, snippet, body, ts))
+        return cur.rowcount > 0
 
 
 def add_task(t: dict) -> None:
     now = utcnow()
     with get_db() as db:
         db.execute(
-            "INSERT INTO tasks (client, contact, channel, request, deadline, priority,"
-            " source, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            _q("INSERT INTO tasks (client, contact, channel, request, deadline,"
+               " priority, source, status, created_at, updated_at)"
+               " VALUES (?,?,?,?,?,?,?,?,?,?)"),
             (
                 t.get("client", "Unknown"), t.get("contact", ""), t.get("channel", ""),
                 t.get("request", ""), t.get("deadline", ""), t.get("priority", "normal"),
@@ -123,7 +150,7 @@ def add_task(t: dict) -> None:
 def set_task_status(task_id: int, status: str) -> None:
     with get_db() as db:
         db.execute(
-            "UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
+            _q("UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?"),
             (status, utcnow(), task_id),
         )
 
@@ -132,15 +159,15 @@ def mark_processed(table: str, ids: list) -> None:
     if not ids or table not in ("wa_messages", "emails"):
         return
     with get_db() as db:
-        q = f"UPDATE {table} SET processed = 1 WHERE id IN ({','.join('?' * len(ids))})"
-        db.execute(q, ids)
+        placeholders = ",".join("?" * len(ids))
+        db.execute(_q(f"UPDATE {table} SET processed = 1 WHERE id IN ({placeholders})"), ids)
 
 
 def record_run(started_at, wa_count, email_count, new_tasks, note="") -> None:
     with get_db() as db:
         db.execute(
-            "INSERT INTO runs (started_at, finished_at, wa_count, email_count,"
-            " new_tasks, note) VALUES (?,?,?,?,?,?)",
+            _q("INSERT INTO runs (started_at, finished_at, wa_count, email_count,"
+               " new_tasks, note) VALUES (?,?,?,?,?,?)"),
             (started_at, utcnow(), wa_count, email_count, new_tasks, note),
         )
 
@@ -149,49 +176,48 @@ def record_run(started_at, wa_count, email_count, new_tasks, note="") -> None:
 
 def unprocessed_wa_messages() -> list:
     with get_db() as db:
-        return [dict(r) for r in db.execute(
-            "SELECT * FROM wa_messages WHERE processed = 0 ORDER BY ts")]
+        return _rows(db.execute(
+            "SELECT * FROM wa_messages WHERE processed = 0 ORDER BY ts"))
 
 
 def unprocessed_emails() -> list:
     with get_db() as db:
-        return [dict(r) for r in db.execute(
-            "SELECT * FROM emails WHERE processed = 0 ORDER BY ts")]
+        return _rows(db.execute(
+            "SELECT * FROM emails WHERE processed = 0 ORDER BY ts"))
 
 
 def open_tasks() -> list:
     with get_db() as db:
-        return [dict(r) for r in db.execute(
-            "SELECT * FROM tasks WHERE status = 'open' ORDER BY client, id")]
+        return _rows(db.execute(
+            "SELECT * FROM tasks WHERE status = 'open' ORDER BY client, id"))
 
 
 def tasks_done_today(today_prefix: str) -> list:
     with get_db() as db:
-        return [dict(r) for r in db.execute(
-            "SELECT * FROM tasks WHERE status = 'done' AND updated_at LIKE ?"
-            " ORDER BY updated_at DESC", (today_prefix + "%",))]
+        return _rows(db.execute(
+            _q("SELECT * FROM tasks WHERE status = 'done' AND updated_at LIKE ?"
+               " ORDER BY updated_at DESC"), (today_prefix + "%",)))
 
 
 def all_tasks(limit: int = 500) -> list:
     with get_db() as db:
-        return [dict(r) for r in db.execute(
-            "SELECT * FROM tasks ORDER BY id DESC LIMIT ?", (limit,))]
+        return _rows(db.execute(_q("SELECT * FROM tasks ORDER BY id DESC LIMIT ?"), (limit,)))
 
 
 def all_wa_messages(limit: int = 500) -> list:
     with get_db() as db:
-        return [dict(r) for r in db.execute(
-            "SELECT * FROM wa_messages ORDER BY id DESC LIMIT ?", (limit,))]
+        return _rows(db.execute(
+            _q("SELECT * FROM wa_messages ORDER BY id DESC LIMIT ?"), (limit,)))
 
 
 def all_emails(limit: int = 500) -> list:
     with get_db() as db:
-        return [dict(r) for r in db.execute(
-            "SELECT id, gmail_id, account, sender, subject, snippet, ts, processed"
-            " FROM emails ORDER BY id DESC LIMIT ?", (limit,))]
+        return _rows(db.execute(
+            _q("SELECT id, gmail_id, account, sender, subject, snippet, ts, processed"
+               " FROM emails ORDER BY id DESC LIMIT ?"), (limit,)))
 
 
 def last_run() -> dict | None:
     with get_db() as db:
-        row = db.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 1").fetchone()
-        return dict(row) if row else None
+        rows = _rows(db.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 1"))
+        return rows[0] if rows else None

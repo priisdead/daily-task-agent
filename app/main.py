@@ -138,6 +138,6 @@ async def run_now(token: str = Query("")):
     return RedirectResponse(url=f"/?token={token}", status_code=303)
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     return {"ok": True}

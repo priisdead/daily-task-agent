@@ -30,6 +30,9 @@ GMAIL_QUERY = os.getenv("GMAIL_QUERY", "in:inbox newer_than:1d -category:{promot
 
 # App
 DASHBOARD_TOKEN = os.getenv("DASHBOARD_TOKEN", "")
+# Postgres connection string (e.g. from Neon). When set, all data lives there
+# and survives restarts/redeploys. When empty, a local SQLite file is used.
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 DATABASE_PATH = os.getenv("DATABASE_PATH", str(BASE_DIR / "data" / "agent.db"))
 MEDIA_DIR = os.getenv("MEDIA_DIR", str(BASE_DIR / "data" / "media"))
 # How often the agent scans for new messages and extracts tasks (minutes)
