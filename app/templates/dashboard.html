@@ -35,6 +35,11 @@
   .btn:hover { border-color: var(--ink-3); color: var(--ink); }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn.primary:hover { opacity: .9; }
+  .btn.active { color: var(--ink); border-color: var(--ink-3); font-weight: 600; }
+  .pill { font-size: 11.5px; padding: 3px 10px; border-radius: 100px;
+    border: 1px solid var(--line); color: var(--ink-3); align-self: flex-start; flex: none; }
+  .pill.in_progress { color: var(--amber); border-color: var(--amber); font-weight: 600; }
+  .pill.open { color: var(--accent); border-color: var(--accent); font-weight: 600; }
 
   h1 { font: 600 34px/1.15 "Fraunces", Georgia, serif; letter-spacing: -.01em;
     margin-top: 40px; }
@@ -78,7 +83,9 @@
   <div class="topbar">
     <span class="brand">Task Agent</span>
     <div class="actions">
-      <a class="btn" href="/history?token={{ token }}">History</a>
+      <a class="btn active" href="/?token={{ token }}">Tasks</a>
+      <a class="btn" href="/mails?token={{ token }}">Mails</a>
+      <a class="btn" href="/whatsapp?token={{ token }}">WhatsApp</a>
       <form method="post" action="/run-now?token={{ token }}" style="margin:0">
         <button class="btn primary" type="submit">Scan now</button>
       </form>
@@ -140,6 +147,20 @@
       <form method="post" action="/tasks/{{ t.id }}/reopen?token={{ token }}">
         <button class="btn" type="submit">Reopen</button>
       </form>
+    </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if archive %}
+  <div class="client done-h">Earlier tasks</div>
+  {% for t in archive %}
+    <div class="task done">
+      <span class="dot"></span>
+      <div class="grow">
+        <div class="req">{{ t.request }}</div>
+        <div class="meta">{{ t.client }} &middot; {{ t.created_at[:10] }}</div>
+      </div>
+      <span class="pill {{ t.status }}">{{ t.status.replace('_',' ') }}</span>
     </div>
   {% endfor %}
   {% endif %}

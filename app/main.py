@@ -86,6 +86,8 @@ async def dashboard(request: Request, token: str = Query("")):
     for t in tasks:
         by_client.setdefault(t["client"] or "Unknown", []).append(t)
     done_today = db.tasks_done_today(datetime.utcnow().date().isoformat())
+    active_ids = {t["id"] for t in tasks} | {t["id"] for t in done_today}
+    archive = [t for t in db.all_tasks() if t["id"] not in active_ids]
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -96,29 +98,38 @@ async def dashboard(request: Request, token: str = Query("")):
             "open_count": sum(1 for t in tasks if t["status"] == "open"),
             "progress_count": sum(1 for t in tasks if t["status"] == "in_progress"),
             "done_today": done_today,
+            "archive": archive,
             "last_run": db.last_run(),
         },
     )
 
 
-@app.get("/history", response_class=HTMLResponse)
-async def history(request: Request, token: str = Query("")):
-    """Full archive: every task, WhatsApp message, and email ever received."""
+@app.get("/mails", response_class=HTMLResponse)
+async def mails(request: Request, token: str = Query("")):
+    """Email history, one section per inbox."""
     _check_token(token)
     emails = db.all_emails()
     by_inbox: dict[str, list] = {}
     for e in emails:
         by_inbox.setdefault(e.get("account") or "unknown inbox", []).append(e)
     return templates.TemplateResponse(
-        request,
-        "history.html",
-        {
-            "token": token,
-            "tasks": db.all_tasks(),
-            "wa_messages": db.all_wa_messages(),
-            "emails_by_inbox": by_inbox,
-        },
+        request, "mails.html", {"token": token, "emails_by_inbox": by_inbox},
     )
+
+
+@app.get("/whatsapp", response_class=HTMLResponse)
+async def whatsapp_page(request: Request, token: str = Query("")):
+    """WhatsApp message history."""
+    _check_token(token)
+    return templates.TemplateResponse(
+        request, "whatsapp.html",
+        {"token": token, "wa_messages": db.all_wa_messages()},
+    )
+
+
+@app.get("/history")
+async def history_redirect(token: str = Query("")):
+    return RedirectResponse(url=f"/mails?token={token}", status_code=302)
 
 
 @app.post("/tasks/{task_id}/done")
