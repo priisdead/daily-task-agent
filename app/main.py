@@ -99,16 +99,19 @@ def _session_user(request: Request) -> dict | None:
 
 
 def _dept_for(request: Request, token: str = "") -> str:
-    """Resolve access to a department. Email login (RBAC) first; legacy
-    token links still work. Admins see everything."""
+    """Resolve access to a department. Email login (RBAC) is the ONLY way
+    in. Exception: while no user accounts exist yet (fresh setup), the
+    legacy ?token= links work so the first admin can be bootstrapped —
+    the moment the first account is created, token links stop working."""
     user = _session_user(request)
     if user:
         return "admin" if user.get("role") == "admin" else (user.get("department") or "")
-    if config.DASHBOARD_TOKEN and token == config.DASHBOARD_TOKEN:
-        return "admin"
-    dept = config.DEPT_TOKENS.get(token)
-    if dept in config.DEPARTMENTS:
-        return dept
+    if db.count_users() == 0:
+        if config.DASHBOARD_TOKEN and token == config.DASHBOARD_TOKEN:
+            return "admin"
+        dept = config.DEPT_TOKENS.get(token)
+        if dept in config.DEPARTMENTS:
+            return dept
     raise HTTPException(status_code=401, detail="not logged in")
 
 
