@@ -10,7 +10,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import (HTMLResponse, PlainTextResponse,
+                               RedirectResponse, Response)
 from fastapi.templating import Jinja2Templates
 
 from . import auth, config, db, digest, extractor, notify, whatsapp
@@ -171,6 +172,7 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
         {
             "token": token,
             "dept": dept,
+            "departments": config.DEPARTMENTS,
             "user_email": (user or {}).get("email", ""),
             "q": q.strip(),
             "date_str": today.strftime("%A, %d %B %Y"),
@@ -226,10 +228,52 @@ async def backfill(request: Request, token: str = Query(""), days: int = Query(3
     )
 
 
+@app.post("/tasks/{task_id}/assign")
+async def task_assign(request: Request, task_id: int, token: str = Query("")):
+    """Assign a task to a department (admin only)."""
+    if _dept_for(request, token) != "admin":
+        raise HTTPException(status_code=403, detail="admin only")
+    form = await request.form()
+    department = str(form.get("department", "")).lower().strip()
+    if department in config.DEPARTMENTS:
+        db.set_task_department(task_id, department)
+    return RedirectResponse(url=f"/?token={token}", status_code=303)
+
+
+@app.post("/tasks/create")
+async def task_create(request: Request, token: str = Query("")):
+    """Manually add a task that didn't come from mail/WhatsApp (admin only)."""
+    if _dept_for(request, token) != "admin":
+        raise HTTPException(status_code=403, detail="admin only")
+    form = await request.form()
+    text = str(form.get("request", "")).strip()
+    if text:
+        department = str(form.get("department", "admin")).lower().strip()
+        priority = str(form.get("priority", "normal")).lower()
+        user = _session_user(request)
+        db.add_task({
+            "client": str(form.get("client", "")).strip() or "Internal",
+            "contact": "",
+            "channel": "manual",
+            "request": text[:500],
+            "department": department if department in config.DEPARTMENTS else "admin",
+            "deadline": str(form.get("deadline", "")).strip()[:100],
+            "priority": priority if priority in ("high", "normal", "low") else "normal",
+            "source": f"added manually by {(user or {}).get('email', 'admin')}",
+        })
+    return RedirectResponse(url=f"/?token={token}", status_code=303)
+
+
 @app.post("/tasks/{task_id}/done")
 async def task_done(request: Request, task_id: int, token: str = Query("")):
     _dept_for(request, token)  # any valid credential may close its tasks
-    db.set_task_status(task_id, "done")
+    form = await request.form()
+    user = _session_user(request)
+    db.set_task_status(
+        task_id, "done",
+        remark=str(form.get("remark", "")),
+        done_by=(user or {}).get("email", ""),
+    )
     return RedirectResponse(url=f"/?token={token}", status_code=303)
 
 
@@ -319,6 +363,26 @@ async def stats(request: Request, token: str = Query("")):
     still queued for the AI, plus task counts and recent runs."""
     _check_token(request, token)
     return db.pipeline_stats()
+
+
+@app.get("/report.pdf")
+async def report_pdf(request: Request, token: str = Query(""), date: str = Query("")):
+    """Downloadable daily report: every department's tasks for the chosen
+    date (admin only). ?date=YYYY-MM-DD, defaults to today."""
+    _check_token(request, token)
+    from . import report
+    tz = ZoneInfo(config.TIMEZONE)
+    try:
+        day = (datetime.strptime(date, "%Y-%m-%d").date()
+               if date else datetime.now(tz).date())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    pdf = await asyncio.to_thread(report.build_daily_pdf, day)
+    return Response(
+        content=pdf, media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'attachment; filename="tasks-{day.isoformat()}.pdf"'},
+    )
 
 
 # ── Email login (RBAC) ───────────────────────────────────────────────────────

@@ -86,6 +86,38 @@
   .task.progress-edge { border-left-color: var(--amber); }
   .due { font-size: 12px; font-weight: 600; color: var(--red);
     border: 1px solid var(--red); border-radius: 100px; padding: 2px 9px; }
+  .assign select { font: 500 12px/1 "Inter"; color: var(--ink-2);
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 100px; padding: 7px 10px; cursor: pointer; outline: none; }
+  .assign select:hover { border-color: var(--ink-3); }
+
+  .admin-tools { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap;
+    align-items: flex-start; }
+  .newtask-box { flex: 1; min-width: 300px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 14px; padding: 4px 16px; }
+  .newtask-box > summary { list-style: none; cursor: pointer; font: 600 13.5px/1 "Inter";
+    padding: 10px 0; color: var(--accent); user-select: none; }
+  .newtask-box > summary::-webkit-details-marker { display: none; }
+  .newtask { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0 14px; }
+  .newtask input, .newtask select { font: 400 13.5px/1 "Inter"; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; outline: none; }
+  .newtask input:focus { border-color: var(--accent); }
+  .report-box { display: flex; gap: 8px; align-items: center;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 10px 16px; }
+  .report-box input[type=date] { font: 400 13px/1 "Inter"; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 10px; outline: none; }
+  .report-box .lbl { font: 600 12px/1 "Inter"; color: var(--ink-3);
+    letter-spacing: .06em; text-transform: uppercase; }
+  .doneform { display: flex; gap: 6px; align-items: center; }
+  .doneform input { font: 400 12.5px/1 "Inter"; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 100px; padding: 8px 12px; width: 170px; outline: none; }
+  .doneform input:focus { border-color: var(--accent); }
+  .remark { font-size: 13px; color: var(--accent); margin-top: 5px; }
+  .remark b { font-weight: 600; }
   .grow { flex: 1; min-width: 0; }
   .req { font-weight: 500; }
   .meta { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
@@ -147,6 +179,35 @@
   </form>
   {% if q %}<div class="scanline">Showing only tasks matching &ldquo;{{ q }}&rdquo;</div>{% endif %}
 
+  {% if dept == 'admin' %}
+  <div class="admin-tools">
+    <details class="newtask-box">
+      <summary>&#65291; New task</summary>
+      <form class="newtask" method="post" action="/tasks/create?token={{ token }}">
+        <input name="request" placeholder="What needs to be done?" required
+               style="flex:1 1 100%">
+        <input name="client" placeholder="Client / who for" style="flex:1;min-width:140px">
+        <select name="department">
+          {% for d in departments %}<option value="{{ d }}">{{ 'QC' if d == 'qc' else d|capitalize }}</option>{% endfor %}
+        </select>
+        <input name="deadline" placeholder="Deadline (optional)" style="width:150px">
+        <select name="priority">
+          <option value="normal">Normal</option>
+          <option value="high">High</option>
+          <option value="low">Low</option>
+        </select>
+        <button class="btn primary" type="submit">Add task</button>
+      </form>
+    </details>
+    <form class="report-box" method="get" action="/report.pdf">
+      <input type="hidden" name="token" value="{{ token }}">
+      <span class="lbl">Daily report</span>
+      <input type="date" name="date">
+      <button class="btn" type="submit">Download PDF</button>
+    </form>
+  </div>
+  {% endif %}
+
   {% if open_count + progress_count == 0 %}
     <div class="empty">
       <div class="big">All clear.</div>
@@ -178,9 +239,27 @@
             {% if t.source %}<div class="src">&ldquo;{{ t.source }}&rdquo;</div>{% endif %}
           </div>
           {% if t.deadline %}<span class="due">Due {{ t.deadline }}</span>{% endif %}
+          {% if dept == 'admin' %}
+          <form class="assign" method="post" action="/tasks/{{ t.id }}/assign?token={{ token }}">
+            <select name="department" onchange="this.form.submit()"
+                    title="Assign to department">
+              {% if not t.department %}<option value="" selected>assign&hellip;</option>{% endif %}
+              {% for d in departments %}
+              <option value="{{ d }}" {% if t.department == d %}selected{% endif %}>{{ 'QC' if d == 'qc' else d|capitalize }}</option>
+              {% endfor %}
+            </select>
+          </form>
+          {% endif %}
+          {% if dept in ('admin', 'management') %}
           <form method="post" action="/tasks/{{ t.id }}/done?token={{ token }}">
             <button class="btn" type="submit">Done</button>
           </form>
+          {% else %}
+          <form class="doneform" method="post" action="/tasks/{{ t.id }}/done?token={{ token }}">
+            <input name="remark" placeholder="Remark (optional)" maxlength="500">
+            <button class="btn" type="submit">Work done</button>
+          </form>
+          {% endif %}
         </div>
       {% endfor %}
       </div>
@@ -198,7 +277,9 @@
       <div class="task done">
         <div class="grow">
           <div class="req">{{ t.request }}</div>
-          <div class="meta">{{ t.client }}</div>
+          <div class="meta">{{ t.client }}{% if dept in ('admin','management') and t.department %} &middot; {{ t.department }}{% endif %}</div>
+          {% if t.remark %}<div class="remark"><b>Remark:</b> {{ t.remark }}{% if t.done_by %} &middot; {{ t.done_by }}{% endif %}</div>
+          {% elif t.done_by %}<div class="remark">{{ t.done_by }}</div>{% endif %}
         </div>
         <form method="post" action="/tasks/{{ t.id }}/reopen?token={{ token }}">
           <button class="btn" type="submit">Reopen</button>
@@ -221,6 +302,7 @@
         <div class="grow">
           <div class="req">{{ t.request }}</div>
           <div class="meta">{{ t.client }} &middot; {{ t.created_at[:10] }}</div>
+          {% if t.remark %}<div class="remark"><b>Remark:</b> {{ t.remark }}{% if t.done_by %} &middot; {{ t.done_by }}{% endif %}</div>{% endif %}
         </div>
         <span class="pill {{ t.status }}">{{ t.status.replace('_',' ') }}</span>
       </div>

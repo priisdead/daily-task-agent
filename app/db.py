@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     priority    TEXT,
     source      TEXT,
     status      TEXT DEFAULT 'open',
+    remark      TEXT DEFAULT '',
+    done_by     TEXT DEFAULT '',
     created_at  TEXT,
     updated_at  TEXT
 );
@@ -136,6 +138,13 @@ def init_db() -> None:
             db.execute("ALTER TABLE tasks ADD COLUMN department TEXT DEFAULT ''")
     except Exception:
         pass  # column already there
+    # migrations for completion remarks
+    for _col in ("remark", "done_by"):
+        try:
+            with get_db() as db:
+                db.execute(f"ALTER TABLE tasks ADD COLUMN {_col} TEXT DEFAULT ''")
+        except Exception:
+            pass  # column already there
 
 
 def _rows(result) -> list:
@@ -189,12 +198,27 @@ def add_task(t: dict) -> None:
         )
 
 
-def set_task_status(task_id: int, status: str) -> None:
+def set_task_department(task_id: int, department: str) -> None:
     with get_db() as db:
         db.execute(
-            _q("UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?"),
-            (status, utcnow(), task_id),
+            _q("UPDATE tasks SET department = ?, updated_at = ? WHERE id = ?"),
+            (department, utcnow(), task_id),
         )
+
+
+def set_task_status(task_id: int, status: str, remark: str | None = None,
+                    done_by: str | None = None) -> None:
+    sets = ["status = ?", "updated_at = ?"]
+    vals: list = [status, utcnow()]
+    if remark is not None and remark.strip():
+        sets.append("remark = ?")
+        vals.append(remark.strip()[:500])
+    if done_by:
+        sets.append("done_by = ?")
+        vals.append(done_by[:200])
+    vals.append(task_id)
+    with get_db() as db:
+        db.execute(_q(f"UPDATE tasks SET {', '.join(sets)} WHERE id = ?"), vals)
 
 
 def mark_processed(table: str, ids: list) -> None:

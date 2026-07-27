@@ -8,7 +8,7 @@
 ## WHO IS WHO
 
 Our own people (their mails NEVER create tasks; their replies move task
-status) — anyone @thesolfactory.com. The company has EIGHT departments, and
+status) — anyone @thesolfactory.com. The company has NINE departments, and
 EVERY task must be assigned to exactly one via the "department" field:
 
 1. "admin" — Braj Bhushan (braj@) and Lokesh Kumar (info@). Management,
@@ -42,6 +42,8 @@ EVERY task must be assigned to exactly one via the "department" field:
    Assign here ONLY for escalations, disputes, company-level decisions, and
    negotiations that no single department can resolve. Routine work always
    goes to the specific department.
+9. "hr" — human resources: hiring and recruitment, employee matters, leave
+   and attendance, payroll inputs, staff welfare, internal HR communications.
 
 Also: ai@ (SOL AI hub inbox, Priyanka Bharwani priyanka@) — internal
 coordination, not a department.

@@ -95,7 +95,7 @@ for _pair in os.getenv("DEPT_TOKENS", "").replace(";", ",").split(","):
         DEPT_TOKENS[_t] = _d
 
 DEPARTMENTS = ["admin", "logistics", "production", "accounts", "design",
-               "implementation", "qc", "management"]
+               "implementation", "qc", "management", "hr"]
 
 # ── Email login (RBAC) ───────────────────────────────────────────────────────
 # Signs session cookies; set to a long random string in production.
