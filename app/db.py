@@ -172,6 +172,16 @@ def mark_processed(table: str, ids: list) -> None:
         db.execute(_q(f"UPDATE {table} SET processed = 1 WHERE id IN ({placeholders})"), ids)
 
 
+def reset_processed() -> int:
+    """Mark ALL stored mail/WA as unprocessed so the next scan re-extracts
+    tasks from everything (used after improving the extraction prompt).
+    Existing open tasks are shown to the AI, so they won't be duplicated."""
+    with get_db() as db:
+        n = db.execute("UPDATE emails SET processed = 0").rowcount or 0
+        n += db.execute("UPDATE wa_messages SET processed = 0").rowcount or 0
+    return n
+
+
 def record_run(started_at, wa_count, email_count, new_tasks, note="") -> None:
     with get_db() as db:
         db.execute(
@@ -226,6 +236,25 @@ def all_emails(limit: int = 500) -> list:
         return _rows(db.execute(
             _q("SELECT id, gmail_id, account, direction, sender, subject, snippet, ts,"
                " processed FROM emails ORDER BY id DESC LIMIT ?"), (limit,)))
+
+
+def pipeline_stats() -> dict:
+    """How much of the captured mail/WA has actually been through the AI."""
+    out = {}
+    with get_db() as db:
+        for table in ("emails", "wa_messages"):
+            rows = _rows(db.execute(
+                f"SELECT processed, COUNT(*) AS n FROM {table} GROUP BY processed"))
+            total = sum(r["n"] for r in rows)
+            done = sum(r["n"] for r in rows if r["processed"])
+            out[table] = {"total": total, "processed": done, "queued": total - done}
+        trows = _rows(db.execute(
+            "SELECT status, COUNT(*) AS n FROM tasks GROUP BY status"))
+        out["tasks"] = {r["status"]: r["n"] for r in trows}
+        out["tasks"]["total"] = sum(out["tasks"].values())
+        out["recent_runs"] = _rows(db.execute(
+            "SELECT * FROM runs ORDER BY id DESC LIMIT 5"))
+    return out
 
 
 def last_run() -> dict | None:

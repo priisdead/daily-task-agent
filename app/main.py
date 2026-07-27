@@ -179,6 +179,30 @@ async def run_now(token: str = Query("")):
     return RedirectResponse(url=f"/?token={token}", status_code=303)
 
 
+@app.get("/reprocess", response_class=HTMLResponse)
+async def reprocess(token: str = Query("")):
+    """Re-run task extraction over EVERY stored mail/WA message (after a
+    prompt improvement). Open tasks are passed to the AI so it won't
+    duplicate them. Runs in the background."""
+    _check_token(token)
+    n = db.reset_processed()
+    asyncio.get_running_loop().run_in_executor(None, extractor.run_digest)
+    return HTMLResponse(
+        f"<body style='font-family:sans-serif;padding:40px'>"
+        f"<h3>Re-scanning {n} stored messages with the improved extractor.</h3>"
+        f"<p>This runs in the background in batches and can take a few minutes. "
+        f"Refresh the <a href='/?token={token}'>Tasks page</a> to watch tasks appear.</p></body>"
+    )
+
+
+@app.get("/stats")
+async def stats(token: str = Query("")):
+    """Pipeline visibility: how many mails/WA msgs are captured, processed,
+    still queued for the AI, plus task counts and recent runs."""
+    _check_token(token)
+    return db.pipeline_stats()
+
+
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     return {"ok": True}

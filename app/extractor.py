@@ -8,43 +8,70 @@ from . import config, db
 
 log = logging.getLogger("extractor")
 
-SYSTEM_PROMPT = """You are a task-extraction engine for a business that receives \
-client requests over WhatsApp and email. You are given (1) the current task \
-list (open and in-progress), (2) new WhatsApp messages, and (3) new emails. \
-Emails marked [YOUR REPLY] were sent BY the business owner; everything else \
-came FROM clients.
+SYSTEM_PROMPT = """You are a task-extraction engine for a manufacturing and \
+export business. Its mail involves clients, logistics partners and freight \
+forwarders (UPS, Kuehne+Nagel, DHL, Logitrust...), suppliers, banks, and \
+internal colleagues. You are given (1) the current task list (open and \
+in-progress), (2) new WhatsApp messages, and (3) new emails. Emails marked \
+[YOUR REPLY] were sent BY the business owner; everything else came from a \
+counterparty.
+
+A TASK is anything that requires the business to act, answer, send, confirm,
+approve, decide, pay, or prepare something. Tasks come from ANYONE, not only
+clients. Examples that MUST become tasks:
+- client orders, sample requests, quote/price questions, product questions
+  ("are these bleached rice paper?")
+- logistics/forwarder asks: confirm goods or docs readiness date, approve a
+  checklist, confirm Incoterms, provide vehicle/transporter details, update
+  a booking or tracking number, delivery address changes
+- production/spec changes ("change sticker quantity from 40 to 48")
+- requests for documents, PO numbers, price lists, invoices — including from
+  internal colleagues
+- bank/compliance document requests
+- a client chasing an update ("any update on our request?") when no open task
+  covers it
+
+Do NOT create tasks for: pure FYI with nothing to do, greetings, thanks,
+congratulations, newsletters/marketing, and automated notifications that
+require no action.
+
+METHOD — follow strictly: go through the NEW messages ONE BY ONE, in order.
+For EACH message decide: does it ask the business to do or answer anything
+that is not already covered by a task in the current task list? If yes,
+create a task. If the same message contains several distinct asks, create
+several tasks. When in doubt, CREATE the task — a missed task costs the
+business money; an extra task costs one click.
 
 Return ONLY a JSON object, no prose, with this exact shape:
 {
   "new_tasks": [
     {
-      "client": "best-known client/company name (use profile name or email sender)",
+      "client": "who is asking — company or person name",
       "contact": "phone number or email address",
       "channel": "whatsapp" | "email",
-      "request": "one clear sentence: what the client needs done",
+      "request": "one clear sentence: what needs to be done",
       "deadline": "deadline if stated or clearly implied, else \\"\\"",
       "priority": "high" | "normal" | "low",
       "source": "short quote (max 25 words) from the originating message"
     }
   ],
   "in_progress_task_ids": [integers — task IDs the owner has ACKNOWLEDGED or committed to (e.g. replied "ok, will send it", "working on it", "sure, by Monday")],
-  "resolved_task_ids": [integers — task IDs that are COMPLETED, cancelled, or superseded (e.g. owner replied "sent", "dispatched", "done", or client withdrew the request)]
+  "resolved_task_ids": [integers — task IDs that are COMPLETED, cancelled, or superseded (e.g. owner replied "sent", "dispatched", "done", or requester withdrew)],
+  "skipped": [{"from": "sender", "why": "reason in max 8 words"} — one entry for EVERY new message that produced no task, so nothing is silently dropped]
 }
 
 Rules:
-- Only extract genuine, actionable client requests. Greetings, acknowledgements,
-  thanks, marketing mail, and newsletters produce NO tasks.
 - The owner's own replies ([YOUR REPLY]) NEVER create new tasks — they only
   move existing tasks to in-progress or resolved.
 - An acknowledgement ("ok I will send it") = in_progress_task_ids. A completion
   ("sent it today", "dispatched") = resolved_task_ids. When ambiguous, prefer
   in_progress.
-- If a client asks about the same thing on both WhatsApp and email, create ONE
-  task and mention both in "source".
+- If the same person asks about the same thing on both WhatsApp and email,
+  create ONE task and mention both in "source".
 - If a new message is an update to an existing task (e.g. changed quantity or
   new deadline), create a new task capturing the latest state and put the old
   task's ID in resolved_task_ids.
-- Never invent deadlines. Keep the client's own wording for dates ("Friday",
+- Never invent deadlines. Keep the sender's own wording for dates ("Friday",
   "by month end").
 - priority is "high" only when urgency is explicit or a deadline is within ~48h.
 """
@@ -151,6 +178,7 @@ def extract_tasks(open_task_list, wa_msgs, emails) -> dict:
     data.setdefault("new_tasks", [])
     data.setdefault("resolved_task_ids", [])
     data.setdefault("in_progress_task_ids", [])
+    data.setdefault("skipped", [])
     data["failed"] = False
     return data
 
@@ -168,7 +196,8 @@ def _apply(result: dict, open_task_list: list) -> None:
             db.set_task_status(tid, "done")
 
 
-BATCH = 30          # messages per AI call — safe for response-size limits
+BATCH = 15          # messages per AI call — small enough that the model
+                    # genuinely considers every single message
 MAX_BATCHES = 40    # safety valve per run
 
 
@@ -198,6 +227,8 @@ def _process_batches() -> tuple[int, int, int]:
         batches += 1
         log.info("batch %d: %d emails, %d WA so far -> %d new tasks",
                  batches, total_em, total_wa, total_new)
+        for s in result.get("skipped", []):
+            log.info("  no task for %s: %s", s.get("from", "?"), s.get("why", ""))
     return total_wa, total_em, total_new
 
 

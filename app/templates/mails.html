@@ -68,6 +68,7 @@
         <div class="sub">{{ e.snippet }}</div>
       </div>
       {% if e.direction == 'outgoing' %}<span class="pill">your reply</span>{% endif %}
+      {% if not e.processed %}<span class="pill" style="color:#B7791F;border-color:#B7791F55">queued</span>{% endif %}
     </div>
     {% endfor %}
   {% else %}
