@@ -1,6 +1,9 @@
 """Claude API call: turn raw WhatsApp messages + emails into structured tasks."""
 import json
 import logging
+import re
+import threading
+import time
 
 import httpx
 
@@ -133,22 +136,38 @@ def _call_gemini(context: str) -> str:
         "https://generativelanguage.googleapis.com/v1beta/models/"
         f"{config.GEMINI_MODEL}:generateContent"
     )
-    resp = httpx.post(
-        url,
-        params={"key": config.GEMINI_API_KEY},
-        json={
-            "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-            "contents": [{"role": "user", "parts": [{"text": context}]}],
-            "generationConfig": {
-                "maxOutputTokens": 16000,
-                "responseMimeType": "application/json",
+    for attempt in range(1, 6):
+        resp = httpx.post(
+            url,
+            params={"key": config.GEMINI_API_KEY},
+            json={
+                "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+                "contents": [{"role": "user", "parts": [{"text": context}]}],
+                "generationConfig": {
+                    "maxOutputTokens": 16000,
+                    "responseMimeType": "application/json",
+                },
             },
-        },
-        timeout=120,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            timeout=120,
+        )
+        if resp.status_code == 429:
+            # Free-tier rate limit. Google usually says how long to wait —
+            # honour it (plus a little margin), else back off progressively.
+            delay = 20 * attempt
+            m = re.search(r'"retryDelay":\s*"(\d+)', resp.text)
+            if m:
+                delay = min(int(m.group(1)) + 3, 95)
+            elif resp.headers.get("retry-after", "").isdigit():
+                delay = min(int(resp.headers["retry-after"]) + 3, 95)
+            log.warning("gemini rate-limited (429) — waiting %ds, attempt %d/5",
+                        delay, attempt)
+            time.sleep(delay)
+            continue
+        resp.raise_for_status()
+        data = resp.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    raise RuntimeError("gemini still rate-limited after 5 attempts — "
+                       "daily free-tier quota may be exhausted")
 
 
 def extract_tasks(open_task_list, wa_msgs, emails) -> dict:
@@ -199,6 +218,9 @@ def _apply(result: dict, open_task_list: list) -> None:
 BATCH = 15          # messages per AI call — small enough that the model
                     # genuinely considers every single message
 MAX_BATCHES = 40    # safety valve per run
+BATCH_PAUSE = 8     # seconds between AI calls — stays under free-tier
+                    # requests-per-minute limits
+_run_lock = threading.Lock()   # never let two scans run at the same time
 
 
 def _process_batches() -> tuple[int, int, int]:
@@ -229,22 +251,31 @@ def _process_batches() -> tuple[int, int, int]:
                  batches, total_em, total_wa, total_new)
         for s in result.get("skipped", []):
             log.info("  no task for %s: %s", s.get("from", "?"), s.get("why", ""))
+        time.sleep(BATCH_PAUSE)  # pace calls for the free-tier rate limit
     return total_wa, total_em, total_new
 
 
 def run_digest() -> None:
-    """The recurring job: pull mail, then extract tasks in safe batches."""
+    """The recurring job: pull mail, then extract tasks in safe batches.
+    If a scan is already running (e.g. Scan now pressed twice), the second
+    call simply skips — no overlapping bursts against the rate limit."""
     from . import gmail_client  # local import so webhook can run without Gmail set up
 
-    started = db.utcnow()
+    if not _run_lock.acquire(blocking=False):
+        log.info("scan already in progress — skipping this trigger")
+        return
     try:
-        gmail_client.fetch_recent_emails()
-    except Exception:
-        log.exception("gmail fetch failed — continuing with WhatsApp only")
+        started = db.utcnow()
+        try:
+            gmail_client.fetch_recent_emails()
+        except Exception:
+            log.exception("gmail fetch failed — continuing with WhatsApp only")
 
-    wa, em, new = _process_batches()
-    db.record_run(started, wa, em, new)
-    log.info("digest: %d WA msgs, %d emails -> %d new tasks", wa, em, new)
+        wa, em, new = _process_batches()
+        db.record_run(started, wa, em, new)
+        log.info("digest: %d WA msgs, %d emails -> %d new tasks", wa, em, new)
+    finally:
+        _run_lock.release()
 
 
 def run_backfill(days: int = 30) -> None:
@@ -253,14 +284,20 @@ def run_backfill(days: int = 30) -> None:
     in order and closes what got resolved."""
     from . import gmail_client
 
-    started = db.utcnow()
-    query = f"newer_than:{days}d (in:inbox OR in:sent) -category:{{promotions social}}"
+    if not _run_lock.acquire(blocking=False):
+        log.info("scan already in progress — backfill skipped, try again shortly")
+        return
     try:
-        fetched = gmail_client.fetch_recent_emails(query=query, max_pages=5)
-        log.info("backfill: fetched %d emails from last %d days", fetched, days)
-    except Exception:
-        log.exception("backfill: gmail fetch failed")
+        started = db.utcnow()
+        query = f"newer_than:{days}d (in:inbox OR in:sent) -category:{{promotions social}}"
+        try:
+            fetched = gmail_client.fetch_recent_emails(query=query, max_pages=5)
+            log.info("backfill: fetched %d emails from last %d days", fetched, days)
+        except Exception:
+            log.exception("backfill: gmail fetch failed")
 
-    wa, em, new = _process_batches()
-    db.record_run(started, wa, em, new, note=f"backfill {days}d")
-    log.info("backfill complete: %d emails -> %d tasks", em, new)
+        wa, em, new = _process_batches()
+        db.record_run(started, wa, em, new, note=f"backfill {days}d")
+        log.info("backfill complete: %d emails -> %d tasks", em, new)
+    finally:
+        _run_lock.release()

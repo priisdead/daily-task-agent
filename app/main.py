@@ -173,9 +173,12 @@ async def task_reopen(task_id: int, token: str = Query("")):
 
 @app.post("/run-now")
 async def run_now(token: str = Query("")):
-    """Manually trigger the digest (useful for testing and mid-day refreshes)."""
+    """Manually trigger the digest (useful for testing and mid-day refreshes).
+    Fire-and-forget: the scan runs in the background (it can take minutes now
+    that batches are paced for the rate limit); if one is already running the
+    trigger is simply ignored."""
     _check_token(token)
-    await asyncio.to_thread(extractor.run_digest)
+    asyncio.get_running_loop().run_in_executor(None, extractor.run_digest)
     return RedirectResponse(url=f"/?token={token}", status_code=303)
 
 
