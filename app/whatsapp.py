@@ -47,6 +47,64 @@ async def download_media(media_id: str) -> str | None:
         return None
 
 
+def send_text(to: str, body: str) -> tuple[bool, str]:
+    """Send a free-form text message via the Cloud API. Works only within
+    24h of the recipient's last message to the business number (Meta rule).
+    Returns (ok, error_detail)."""
+    if not (config.WHATSAPP_ACCESS_TOKEN and config.WHATSAPP_PHONE_NUMBER_ID and to):
+        return False, "whatsapp sending not configured (need WHATSAPP_PHONE_NUMBER_ID + WA_NOTIFY_TO)"
+    try:
+        resp = httpx.post(
+            f"{config.GRAPH_API_BASE}/{config.WHATSAPP_PHONE_NUMBER_ID}/messages",
+            headers={"Authorization": f"Bearer {config.WHATSAPP_ACCESS_TOKEN}"},
+            json={
+                "messaging_product": "whatsapp",
+                "to": to,
+                "type": "text",
+                "text": {"preview_url": False, "body": body[:4000]},
+            },
+            timeout=30,
+        )
+        if resp.status_code < 300:
+            return True, ""
+        return False, resp.text[:300]
+    except Exception as exc:
+        return False, str(exc)[:300]
+
+
+def send_template(to: str, name: str, params: list, lang: str = "en") -> tuple[bool, str]:
+    """Send a pre-approved template message (allowed anytime, no 24h window).
+    `params` fill the template's {{1}}, {{2}}... placeholders in order."""
+    if not (config.WHATSAPP_ACCESS_TOKEN and config.WHATSAPP_PHONE_NUMBER_ID and to and name):
+        return False, "whatsapp template sending not configured"
+    try:
+        resp = httpx.post(
+            f"{config.GRAPH_API_BASE}/{config.WHATSAPP_PHONE_NUMBER_ID}/messages",
+            headers={"Authorization": f"Bearer {config.WHATSAPP_ACCESS_TOKEN}"},
+            json={
+                "messaging_product": "whatsapp",
+                "to": to,
+                "type": "template",
+                "template": {
+                    "name": name,
+                    "language": {"code": lang},
+                    "components": [{
+                        "type": "body",
+                        "parameters": [
+                            {"type": "text", "text": str(p)[:120]} for p in params
+                        ],
+                    }],
+                },
+            },
+            timeout=30,
+        )
+        if resp.status_code < 300:
+            return True, ""
+        return False, resp.text[:300]
+    except Exception as exc:
+        return False, str(exc)[:300]
+
+
 async def handle_webhook_payload(payload: dict) -> int:
     """Parse a Meta webhook POST body; store every inbound message.
     Returns the number of new messages stored."""

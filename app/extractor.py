@@ -182,8 +182,9 @@ def extract_tasks(open_task_list, wa_msgs, emails) -> dict:
             text = _call_gemini(context)
         else:
             text = _call_claude(context)
-    except Exception:
+    except Exception as exc:
         log.exception("%s API call failed", config.LLM_PROVIDER)
+        db.log_event("error", "llm", f"{config.LLM_PROVIDER} call failed: {exc}")
         return _empty(failed=True)
     # tolerate accidental code fences
     if text.startswith("```"):
@@ -193,6 +194,8 @@ def extract_tasks(open_task_list, wa_msgs, emails) -> dict:
         data = json.loads(text[text.find("{"): text.rfind("}") + 1])
     except (ValueError, json.JSONDecodeError):
         log.error("%s returned unparseable output: %.500s", config.LLM_PROVIDER, text)
+        db.log_event("error", "llm",
+                     f"{config.LLM_PROVIDER} returned unparseable output (truncated?)")
         return _empty(failed=True)
     data.setdefault("new_tasks", [])
     data.setdefault("resolved_task_ids", [])
@@ -239,6 +242,9 @@ def _process_batches() -> tuple[int, int, int]:
         if result["failed"]:
             log.error("batch failed — leaving %d emails / %d WA msgs queued for retry",
                       len(emails), len(wa_msgs))
+            db.log_event("warn", "extractor",
+                         f"batch failed — {len(emails)} emails / {len(wa_msgs)} WA "
+                         f"left queued for retry")
             break
         _apply(result, open_task_list)
         db.mark_processed("emails", [e["id"] for e in emails])
@@ -251,6 +257,10 @@ def _process_batches() -> tuple[int, int, int]:
                  batches, total_em, total_wa, total_new)
         for s in result.get("skipped", []):
             log.info("  no task for %s: %s", s.get("from", "?"), s.get("why", ""))
+        try:
+            db.save_skipped(result.get("skipped", []))
+        except Exception:
+            log.exception("could not store skipped reasons (non-fatal)")
         time.sleep(BATCH_PAUSE)  # pace calls for the free-tier rate limit
     return total_wa, total_em, total_new
 
@@ -268,14 +278,44 @@ def run_digest() -> None:
         started = db.utcnow()
         try:
             gmail_client.fetch_recent_emails()
-        except Exception:
+        except Exception as exc:
             log.exception("gmail fetch failed — continuing with WhatsApp only")
+            db.log_event("error", "gmail", f"mail fetch failed: {exc}")
 
         wa, em, new = _process_batches()
         db.record_run(started, wa, em, new)
         log.info("digest: %d WA msgs, %d emails -> %d new tasks", wa, em, new)
+        _alert_if_backlog()
     finally:
         _run_lock.release()
+
+
+_last_backlog_alert = 0.0
+ALERT_COOLDOWN = 6 * 3600   # at most one backlog alert every 6 hours
+
+
+def _alert_if_backlog() -> None:
+    """If a scan finished but messages are still queued, something failed
+    mid-run (rate limit, API error). Tell the owner instead of staying silent."""
+    global _last_backlog_alert
+    from . import notify
+
+    try:
+        stats = db.pipeline_stats()
+        queued = stats["emails"]["queued"] + stats["wa_messages"]["queued"]
+        if queued and time.time() - _last_backlog_alert > ALERT_COOLDOWN:
+            _last_backlog_alert = time.time()
+            notify.send_email(
+                f"[Task Agent] {queued} messages stuck in queue",
+                f"A scan just finished but {queued} messages are still waiting "
+                f"for the AI (a batch failed — usually the Gemini rate limit).\n\n"
+                f"They will be retried automatically on the next scan. If this "
+                f"alert repeats all day, the daily free-tier quota is likely "
+                f"exhausted; it resets around midday IST (midnight Pacific).\n\n"
+                f"Live status: /stats?token=...",
+            )
+    except Exception:
+        log.exception("backlog alert failed (non-fatal)")
 
 
 def run_backfill(days: int = 30) -> None:

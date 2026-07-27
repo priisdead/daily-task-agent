@@ -7,12 +7,13 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from . import config, db, extractor, whatsapp
+from . import config, db, digest, extractor, notify, whatsapp
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("main")
@@ -32,10 +33,18 @@ async def lifespan(app: FastAPI):
         max_instances=1,       # never let two scans overlap
         coalesce=True,         # if the host slept, run once, not N times
     )
+    # One morning update, numbers only, to BOTH WhatsApp and email.
+    # (The detailed, task-by-task digest stays available at /digest.)
+    scheduler.add_job(
+        digest.send_morning,
+        CronTrigger(hour=config.WA_DIGEST_HOUR, minute=0),
+        id="morning_update",
+        replace_existing=True,
+    )
     scheduler.start()
     log.info(
-        "Scheduler started: scanning every %d minutes (%s)",
-        config.SCAN_INTERVAL_MINUTES, config.TIMEZONE,
+        "Scheduler started: scanning every %d minutes, digest daily at %02d:00 (%s)",
+        config.SCAN_INTERVAL_MINUTES, config.DIGEST_HOUR, config.TIMEZONE,
     )
     yield
     scheduler.shutdown(wait=False)
@@ -180,6 +189,52 @@ async def run_now(token: str = Query("")):
     _check_token(token)
     asyncio.get_running_loop().run_in_executor(None, extractor.run_digest)
     return RedirectResponse(url=f"/?token={token}", status_code=303)
+
+
+@app.get("/skipped", response_class=HTMLResponse)
+async def skipped_page(request: Request, token: str = Query(""), days: int = Query(7, ge=1, le=90)):
+    """Audit page: every mail the AI decided NOT to turn into a task, with
+    its one-line reason. If you disagree with a reason, that mail's request
+    can be added by hand on the dashboard — and tell the AI's owner to tune
+    the prompt."""
+    _check_token(token)
+    from datetime import datetime, timedelta, timezone as tz
+    since = (datetime.now(tz.utc) - timedelta(days=days)).isoformat()
+    return templates.TemplateResponse(
+        request, "skipped.html",
+        {"token": token, "days": days, "rows": db.skipped_since(since, limit=500)},
+    )
+
+
+@app.get("/digest", response_class=PlainTextResponse)
+async def digest_preview(token: str = Query(""), send: int = Query(0)):
+    """Preview today's digest as plain text; add &send=1 to email it now."""
+    _check_token(token)
+    text = digest.build()
+    if send:
+        ok = notify.send_email("[Task Agent] Daily digest (manual)", text)
+        text = (
+            ("EMAILED OK\n\n" if ok else
+             "NOT EMAILED — SMTP not configured or failed (see logs). "
+             "Set SMTP_USER / SMTP_PASS / NOTIFY_TO.\n\n")
+            + text
+        )
+    return text
+
+
+@app.get("/wa-digest", response_class=PlainTextResponse)
+async def wa_digest_preview(token: str = Query(""), send: int = Query(0)):
+    """Preview the numbers-only morning update; add &send=1 to send it now
+    to both WhatsApp and email."""
+    _check_token(token)
+    text = digest.build_wa()
+    if send:
+        ok = await asyncio.to_thread(digest.send_morning)
+        text = (("SENT (at least one channel OK)\n\n" if ok else
+                 "SEND FAILED on both WhatsApp and email — check that "
+                 "WHATSAPP_PHONE_NUMBER_ID and SMTP_USER/SMTP_PASS are set; "
+                 "details in logs.\n\n") + text)
+    return text
 
 
 @app.get("/reprocess", response_class=HTMLResponse)

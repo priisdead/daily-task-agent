@@ -65,6 +65,21 @@ CREATE TABLE IF NOT EXISTS runs (
     new_tasks   INTEGER,
     note        TEXT
 );
+
+CREATE TABLE IF NOT EXISTS skipped_msgs (
+    id          {_ID},
+    sender      TEXT,
+    reason      TEXT,
+    created_at  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS events (
+    id          {_ID},
+    level       TEXT,
+    source      TEXT,
+    message     TEXT,
+    created_at  TEXT
+);
 """
 
 
@@ -170,6 +185,61 @@ def mark_processed(table: str, ids: list) -> None:
     with get_db() as db:
         placeholders = ",".join("?" * len(ids))
         db.execute(_q(f"UPDATE {table} SET processed = 1 WHERE id IN ({placeholders})"), ids)
+
+
+def log_event(level: str, source: str, message: str) -> None:
+    """Record a health event (error/warn/info) so morning updates can report
+    problems. Never raises — health logging must not break the pipeline."""
+    try:
+        with get_db() as db:
+            db.execute(
+                _q("INSERT INTO events (level, source, message, created_at)"
+                   " VALUES (?,?,?,?)"),
+                (level, source, str(message)[:300], utcnow()),
+            )
+    except Exception:
+        pass
+
+
+def events_since(iso_ts: str, limit: int = 100) -> list:
+    with get_db() as db:
+        return _rows(db.execute(
+            _q("SELECT * FROM events WHERE created_at >= ?"
+               " ORDER BY id DESC LIMIT ?"), (iso_ts, limit)))
+
+
+def save_skipped(entries: list) -> None:
+    """Persist the AI's 'no task because...' decisions so they can be audited
+    on the /skipped page and in the daily digest."""
+    now = utcnow()
+    with get_db() as db:
+        for e in entries:
+            db.execute(
+                _q("INSERT INTO skipped_msgs (sender, reason, created_at)"
+                   " VALUES (?,?,?)"),
+                (str(e.get("from", "?"))[:200], str(e.get("why", ""))[:300], now),
+            )
+
+
+def skipped_since(iso_ts: str, limit: int = 200) -> list:
+    with get_db() as db:
+        return _rows(db.execute(
+            _q("SELECT * FROM skipped_msgs WHERE created_at >= ?"
+               " ORDER BY id DESC LIMIT ?"), (iso_ts, limit)))
+
+
+def tasks_created_since(iso_ts: str) -> list:
+    with get_db() as db:
+        return _rows(db.execute(
+            _q("SELECT * FROM tasks WHERE created_at >= ? ORDER BY id DESC"),
+            (iso_ts,)))
+
+
+def runs_since(iso_ts: str) -> list:
+    with get_db() as db:
+        return _rows(db.execute(
+            _q("SELECT * FROM runs WHERE started_at >= ? ORDER BY id DESC"),
+            (iso_ts,)))
 
 
 def reset_processed() -> int:

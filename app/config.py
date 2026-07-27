@@ -13,6 +13,16 @@ WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
 WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "")
 WHATSAPP_APP_SECRET = os.getenv("WHATSAPP_APP_SECRET", "")
 GRAPH_API_BASE = "https://graph.facebook.com/v21.0"
+# Sending (morning WhatsApp update): the phone_number_id from the Meta app
+# dashboard, and YOUR personal WhatsApp number (country code, no +, e.g.
+# 9198xxxxxxxx). Leave empty to disable WhatsApp sending.
+WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+WA_NOTIFY_TO = os.getenv("WA_NOTIFY_TO", "917778988358")
+# Approved template name for business-initiated messages outside the 24h
+# window (optional but recommended). Params: {{1}} open, {{2} high, {{3}} new.
+WA_TEMPLATE_NAME = os.getenv("WA_TEMPLATE_NAME", "")
+WA_TEMPLATE_LANG = os.getenv("WA_TEMPLATE_LANG", "en")
+WA_DIGEST_HOUR = int(os.getenv("WA_DIGEST_HOUR", "9"))  # local hour, daily
 
 # LLM provider: "claude" or "gemini"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "claude").lower()
@@ -52,6 +62,18 @@ IGNORE_SENDERS = [
     for s in (_DEFAULT_IGNORES + "," + os.getenv("IGNORE_SENDERS", "")).split(",")
     if s.strip()
 ]
+
+# ── Notifications: daily digest + failure alerts ────────────────────────────
+# Sent by plain SMTP. For Gmail: turn on 2-Step Verification, then create an
+# App Password (myaccount.google.com/apppasswords) and use it as SMTP_PASS.
+# Leave SMTP_USER/SMTP_PASS/NOTIFY_TO empty to disable sending (digest still
+# viewable at /digest).
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASS = os.getenv("SMTP_PASS", "")
+NOTIFY_TO = os.getenv("NOTIFY_TO", "priyanka@thesolfactory.com")  # comma-separated
+DIGEST_HOUR = int(os.getenv("DIGEST_HOUR", "8"))  # local (TIMEZONE) hour, daily
 
 # App
 DASHBOARD_TOKEN = os.getenv("DASHBOARD_TOKEN", "")
