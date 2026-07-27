@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from . import config, db, digest, extractor, notify, whatsapp
+from . import auth, config, db, digest, extractor, notify, whatsapp
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("main")
@@ -25,6 +25,12 @@ scheduler = BackgroundScheduler(timezone=config.TIMEZONE)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    # Seed the first admin account so someone can log in and add the rest.
+    if config.INIT_ADMIN_EMAIL and config.INIT_ADMIN_PASSWORD:
+        if not db.get_user(config.INIT_ADMIN_EMAIL):
+            salt, ph = auth.hash_password(config.INIT_ADMIN_PASSWORD)
+            db.create_user(config.INIT_ADMIN_EMAIL, salt, ph, "admin", "admin")
+            log.info("seeded initial admin user %s", config.INIT_ADMIN_EMAIL)
     scheduler.add_job(
         extractor.run_digest,
         IntervalTrigger(minutes=config.SCAN_INTERVAL_MINUTES),
@@ -80,8 +86,40 @@ async def webhook_receive(request: Request):
 
 # ── Dashboard ────────────────────────────────────────────────────────────────
 
-def _check_token(token: str) -> None:
-    if not config.DASHBOARD_TOKEN or token != config.DASHBOARD_TOKEN:
+def _session_user(request: Request) -> dict | None:
+    """The logged-in user (via session cookie), or None."""
+    email = auth.read_session(request.cookies.get(auth.SESSION_COOKIE))
+    if not email:
+        return None
+    user = db.get_user(email)
+    if user and user.get("active"):
+        return user
+    return None
+
+
+def _dept_for(request: Request, token: str = "") -> str:
+    """Resolve access to a department. Email login (RBAC) first; legacy
+    token links still work. Admins see everything."""
+    user = _session_user(request)
+    if user:
+        return "admin" if user.get("role") == "admin" else (user.get("department") or "")
+    if config.DASHBOARD_TOKEN and token == config.DASHBOARD_TOKEN:
+        return "admin"
+    dept = config.DEPT_TOKENS.get(token)
+    if dept in config.DEPARTMENTS:
+        return dept
+    raise HTTPException(status_code=401, detail="not logged in")
+
+
+def _check_token(request_or_token, token: str | None = None) -> None:
+    """Admin-only gate: mails, whatsapp, skipped, stats, digest, scans."""
+    if isinstance(request_or_token, Request):
+        if _dept_for(request_or_token, token or "") != "admin":
+            raise HTTPException(status_code=403, detail="admin access only")
+    else:  # plain token (no request context)
+        if (config.DASHBOARD_TOKEN and request_or_token == config.DASHBOARD_TOKEN) or \
+           config.DEPT_TOKENS.get(request_or_token) == "admin":
+            return
         raise HTTPException(status_code=401, detail="invalid or missing ?token=")
 
 
@@ -92,7 +130,11 @@ def _matches(t: dict, q: str) -> bool:
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, token: str = Query(""), q: str = Query("")):
-    _check_token(token)
+    try:
+        dept = _dept_for(request, token)
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=302)
+    user = _session_user(request)
     tz = ZoneInfo(config.TIMEZONE)
     today = datetime.now(tz)
     query = q.strip().lower()
@@ -100,6 +142,11 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
     done_today = db.tasks_done_today(datetime.utcnow().date().isoformat())
     active_ids = {t["id"] for t in tasks} | {t["id"] for t in done_today}
     archive = [t for t in db.all_tasks() if t["id"] not in active_ids]
+    if dept != "admin":
+        # department credential: only this department's tasks
+        tasks = [t for t in tasks if (t.get("department") or "") == dept]
+        done_today = [t for t in done_today if (t.get("department") or "") == dept]
+        archive = [t for t in archive if (t.get("department") or "") == dept]
     if query:
         tasks = [t for t in tasks if _matches(t, query)]
         done_today = [t for t in done_today if _matches(t, query)]
@@ -121,6 +168,8 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
         "dashboard.html",
         {
             "token": token,
+            "dept": dept,
+            "user_email": (user or {}).get("email", ""),
             "q": q.strip(),
             "date_str": today.strftime("%A, %d %B %Y"),
             "by_client": by_client,
@@ -136,7 +185,7 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
 @app.get("/mails", response_class=HTMLResponse)
 async def mails(request: Request, token: str = Query("")):
     """Email history, one section per inbox."""
-    _check_token(token)
+    _check_token(request, token)
     emails = db.all_emails()
     by_inbox: dict[str, list] = {}
     for e in emails:
@@ -149,7 +198,7 @@ async def mails(request: Request, token: str = Query("")):
 @app.get("/whatsapp", response_class=HTMLResponse)
 async def whatsapp_page(request: Request, token: str = Query("")):
     """WhatsApp message history."""
-    _check_token(token)
+    _check_token(request, token)
     return templates.TemplateResponse(
         request, "whatsapp.html",
         {"token": token, "wa_messages": db.all_wa_messages()},
@@ -162,9 +211,9 @@ async def history_redirect(token: str = Query("")):
 
 
 @app.get("/backfill", response_class=HTMLResponse)
-async def backfill(token: str = Query(""), days: int = Query(30, ge=1, le=90)):
+async def backfill(request: Request, token: str = Query(""), days: int = Query(30, ge=1, le=90)):
     """One-time seeding from past mail. Runs in the background."""
-    _check_token(token)
+    _check_token(request, token)
     asyncio.get_running_loop().run_in_executor(None, extractor.run_backfill, days)
     return HTMLResponse(
         f"<body style='font-family:sans-serif;padding:40px'>"
@@ -176,37 +225,37 @@ async def backfill(token: str = Query(""), days: int = Query(30, ge=1, le=90)):
 
 
 @app.post("/tasks/{task_id}/done")
-async def task_done(task_id: int, token: str = Query("")):
-    _check_token(token)
+async def task_done(request: Request, task_id: int, token: str = Query("")):
+    _dept_for(request, token)  # any valid credential may close its tasks
     db.set_task_status(task_id, "done")
     return RedirectResponse(url=f"/?token={token}", status_code=303)
 
 
 @app.post("/tasks/{task_id}/reopen")
-async def task_reopen(task_id: int, token: str = Query("")):
-    _check_token(token)
+async def task_reopen(request: Request, task_id: int, token: str = Query("")):
+    _dept_for(request, token)
     db.set_task_status(task_id, "open")
     return RedirectResponse(url=f"/?token={token}", status_code=303)
 
 
 @app.post("/run-now")
-async def run_now(token: str = Query("")):
+async def run_now(request: Request, token: str = Query("")):
     """Manually trigger the digest (useful for testing and mid-day refreshes).
     Fire-and-forget: the scan runs in the background (it can take minutes now
     that batches are paced for the rate limit); if one is already running the
     trigger is simply ignored."""
-    _check_token(token)
+    _check_token(request, token)
     asyncio.get_running_loop().run_in_executor(None, extractor.run_digest)
     return RedirectResponse(url=f"/?token={token}", status_code=303)
 
 
 @app.get("/skipped", response_class=HTMLResponse)
-async def skipped_page(request: Request, token: str = Query(""), days: int = Query(7, ge=1, le=90)):
+async def skipped_page(request: Request, token: str = Query(""), days: int = Query(7, ge=1, le=90)):  # noqa: E501
     """Audit page: every mail the AI decided NOT to turn into a task, with
     its one-line reason. If you disagree with a reason, that mail's request
     can be added by hand on the dashboard — and tell the AI's owner to tune
     the prompt."""
-    _check_token(token)
+    _check_token(request, token)
     from datetime import datetime, timedelta, timezone as tz
     since = (datetime.now(tz.utc) - timedelta(days=days)).isoformat()
     return templates.TemplateResponse(
@@ -216,9 +265,9 @@ async def skipped_page(request: Request, token: str = Query(""), days: int = Que
 
 
 @app.get("/digest", response_class=PlainTextResponse)
-async def digest_preview(token: str = Query(""), send: int = Query(0)):
+async def digest_preview(request: Request, token: str = Query(""), send: int = Query(0)):
     """Preview today's digest as plain text; add &send=1 to email it now."""
-    _check_token(token)
+    _check_token(request, token)
     text = digest.build()
     if send:
         ok = notify.send_email("[Task Agent] Daily digest (manual)", text)
@@ -232,10 +281,10 @@ async def digest_preview(token: str = Query(""), send: int = Query(0)):
 
 
 @app.get("/wa-digest", response_class=PlainTextResponse)
-async def wa_digest_preview(token: str = Query(""), send: int = Query(0)):
+async def wa_digest_preview(request: Request, token: str = Query(""), send: int = Query(0)):
     """Preview the numbers-only morning update; add &send=1 to send it now
     to both WhatsApp and email."""
-    _check_token(token)
+    _check_token(request, token)
     text = digest.build_wa()
     if send:
         ok = await asyncio.to_thread(digest.send_morning)
@@ -247,11 +296,11 @@ async def wa_digest_preview(token: str = Query(""), send: int = Query(0)):
 
 
 @app.get("/reprocess", response_class=HTMLResponse)
-async def reprocess(token: str = Query("")):
+async def reprocess(request: Request, token: str = Query("")):
     """Re-run task extraction over EVERY stored mail/WA message (after a
     prompt improvement). Open tasks are passed to the AI so it won't
     duplicate them. Runs in the background."""
-    _check_token(token)
+    _check_token(request, token)
     n = db.reset_processed()
     asyncio.get_running_loop().run_in_executor(None, extractor.run_digest)
     return HTMLResponse(
@@ -263,11 +312,101 @@ async def reprocess(token: str = Query("")):
 
 
 @app.get("/stats")
-async def stats(token: str = Query("")):
+async def stats(request: Request, token: str = Query("")):
     """Pipeline visibility: how many mails/WA msgs are captured, processed,
     still queued for the AI, plus task counts and recent runs."""
-    _check_token(token)
+    _check_token(request, token)
     return db.pipeline_stats()
+
+
+# ── Email login (RBAC) ───────────────────────────────────────────────────────
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, error: str = Query("")):
+    if _session_user(request):
+        return RedirectResponse(url="/", status_code=302)
+    return templates.TemplateResponse(request, "login.html", {"error": error})
+
+
+@app.post("/login")
+async def login_submit(request: Request):
+    form = await request.form()
+    email = str(form.get("email", "")).strip().lower()
+    password = str(form.get("password", ""))
+    user = db.get_user(email)
+    if not user or not user.get("active") or \
+       not auth.verify_password(password, user.get("salt", ""), user.get("pass_hash", "")):
+        return RedirectResponse(url="/login?error=Wrong+email+or+password",
+                                status_code=303)
+    resp = RedirectResponse(url="/", status_code=303)
+    resp.set_cookie(auth.SESSION_COOKIE, auth.make_session(email),
+                    max_age=auth.SESSION_TTL, httponly=True, samesite="lax",
+                    secure=(request.url.scheme == "https"))
+    return resp
+
+
+@app.get("/logout")
+async def logout():
+    resp = RedirectResponse(url="/login", status_code=302)
+    resp.delete_cookie(auth.SESSION_COOKIE)
+    return resp
+
+
+# ── Admin: user management (who belongs to which department) ────────────────
+
+@app.get("/users", response_class=HTMLResponse)
+async def users_page(request: Request, token: str = Query(""), msg: str = Query("")):
+    _check_token(request, token)
+    return templates.TemplateResponse(
+        request, "users.html",
+        {"token": token, "users": db.list_users(),
+         "departments": config.DEPARTMENTS, "msg": msg},
+    )
+
+
+@app.post("/users/action")
+async def users_action(request: Request, token: str = Query("")):
+    _check_token(request, token)
+    form = await request.form()
+    action = str(form.get("action", ""))
+    email = str(form.get("email", "")).strip().lower()
+    msg = "done"
+    if action == "add":
+        password = str(form.get("password", ""))
+        department = str(form.get("department", "admin")).lower()
+        role = "admin" if str(form.get("role", "")) == "admin" else "member"
+        if department not in config.DEPARTMENTS:
+            department = "admin"
+        if not email or "@" not in email or len(password) < 6:
+            msg = "need a valid email and a password of 6+ characters"
+        elif db.get_user(email):
+            msg = f"{email} already exists"
+        else:
+            salt, ph = auth.hash_password(password)
+            db.create_user(email, salt, ph, department, role)
+            msg = f"added {email} to {department}"
+    elif action == "dept":
+        department = str(form.get("department", "")).lower()
+        if department in config.DEPARTMENTS:
+            db.update_user(email, department=department,
+                           role="admin" if department == "admin" else None)
+            msg = f"{email} moved to {department}"
+    elif action == "password":
+        password = str(form.get("password", ""))
+        if len(password) >= 6:
+            salt, ph = auth.hash_password(password)
+            db.update_user(email, salt=salt, pass_hash=ph)
+            msg = f"password reset for {email}"
+        else:
+            msg = "password must be 6+ characters"
+    elif action == "toggle":
+        u = db.get_user(email)
+        if u:
+            db.update_user(email, active=0 if u.get("active") else 1)
+            msg = f"{email} {'deactivated' if u.get('active') else 'reactivated'}"
+    from urllib.parse import quote
+    return RedirectResponse(url=f"/users?token={token}&msg={quote(msg)}",
+                            status_code=303)
 
 
 @app.api_route("/health", methods=["GET", "HEAD"])

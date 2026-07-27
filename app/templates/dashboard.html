@@ -111,16 +111,21 @@
     <span class="brand">Task Agent</span>
     <div class="actions">
       <a class="btn active" href="/?token={{ token }}">Tasks</a>
+      {% if dept == 'admin' %}
       <a class="btn" href="/mails?token={{ token }}">Mails</a>
       <a class="btn" href="/whatsapp?token={{ token }}">WhatsApp</a>
+      <a class="btn" href="/skipped?token={{ token }}">Skipped</a>
+      <a class="btn" href="/users?token={{ token }}">Users</a>
       <form method="post" action="/run-now?token={{ token }}" style="margin:0">
         <button class="btn primary" type="submit">Scan now</button>
       </form>
+      {% endif %}
+      {% if user_email %}<a class="btn" href="/logout" title="{{ user_email }}">Logout</a>{% endif %}
     </div>
   </div>
 
-  <h1>Today</h1>
-  <div class="date">{{ date_str }}</div>
+  <h1>Today{% if dept != 'admin' %} — {{ dept|capitalize }}{% endif %}</h1>
+  <div class="date">{{ date_str }}{% if dept != 'admin' %} &middot; your department's tasks{% endif %}</div>
 
   <div class="stats">
     <div class="stat"><div class="n">{{ open_count }}</div><div class="l">Open</div></div>
@@ -166,6 +171,7 @@
             <div class="req">{{ t.request }}</div>
             <div class="meta">
               <span class="tag">{{ t.channel }}</span>
+              {% if dept == 'admin' and t.department %} &middot; <span class="tag">{{ t.department }}</span>{% endif %}
               {% if t.status == 'in_progress' %} &middot; <span class="tag progress">in progress</span>{% endif %}
               {% if t.priority == 'high' %} &middot; <span class="tag high">high priority</span>{% endif %}
             </div>

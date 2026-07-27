@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     contact     TEXT,
     channel     TEXT,
     request     TEXT,
+    department  TEXT DEFAULT '',
     deadline    TEXT,
     priority    TEXT,
     source      TEXT,
@@ -78,6 +79,17 @@ CREATE TABLE IF NOT EXISTS events (
     level       TEXT,
     source      TEXT,
     message     TEXT,
+    created_at  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id          {_ID},
+    email       TEXT UNIQUE,
+    salt        TEXT,
+    pass_hash   TEXT,
+    department  TEXT DEFAULT '',
+    role        TEXT DEFAULT 'member',
+    active      INTEGER DEFAULT 1,
     created_at  TEXT
 );
 """
@@ -116,6 +128,12 @@ def init_db() -> None:
     try:
         with get_db() as db:
             db.execute("ALTER TABLE emails ADD COLUMN direction TEXT DEFAULT 'incoming'")
+    except Exception:
+        pass  # column already there
+    # migration for databases created before the 'department' column existed
+    try:
+        with get_db() as db:
+            db.execute("ALTER TABLE tasks ADD COLUMN department TEXT DEFAULT ''")
     except Exception:
         pass  # column already there
 
@@ -160,13 +178,13 @@ def add_task(t: dict) -> None:
     now = utcnow()
     with get_db() as db:
         db.execute(
-            _q("INSERT INTO tasks (client, contact, channel, request, deadline,"
-               " priority, source, status, created_at, updated_at)"
-               " VALUES (?,?,?,?,?,?,?,?,?,?)"),
+            _q("INSERT INTO tasks (client, contact, channel, request, department,"
+               " deadline, priority, source, status, created_at, updated_at)"
+               " VALUES (?,?,?,?,?,?,?,?,?,?,?)"),
             (
                 t.get("client", "Unknown"), t.get("contact", ""), t.get("channel", ""),
-                t.get("request", ""), t.get("deadline", ""), t.get("priority", "normal"),
-                t.get("source", ""), "open", now, now,
+                t.get("request", ""), t.get("department", ""), t.get("deadline", ""),
+                t.get("priority", "normal"), t.get("source", ""), "open", now, now,
             ),
         )
 
@@ -185,6 +203,55 @@ def mark_processed(table: str, ids: list) -> None:
     with get_db() as db:
         placeholders = ",".join("?" * len(ids))
         db.execute(_q(f"UPDATE {table} SET processed = 1 WHERE id IN ({placeholders})"), ids)
+
+
+# ── users (email login / RBAC) ───────────────────────────────────────────────
+
+def get_user(email: str) -> dict | None:
+    with get_db() as db:
+        rows = _rows(db.execute(
+            _q("SELECT * FROM users WHERE lower(email) = ?"), (email.strip().lower(),)))
+        return rows[0] if rows else None
+
+
+def list_users() -> list:
+    with get_db() as db:
+        return _rows(db.execute("SELECT * FROM users ORDER BY role DESC, email"))
+
+
+def count_users() -> int:
+    with get_db() as db:
+        rows = _rows(db.execute("SELECT COUNT(*) AS n FROM users"))
+        return rows[0]["n"] if rows else 0
+
+
+def create_user(email: str, salt: str, pass_hash: str,
+                department: str, role: str = "member") -> bool:
+    sql = ("INSERT INTO users (email, salt, pass_hash, department, role,"
+           " active, created_at) VALUES (?,?,?,?,?,1,?)")
+    sql += " ON CONFLICT (email) DO NOTHING" if IS_PG else ""
+    if not IS_PG:
+        sql = sql.replace("INSERT INTO", "INSERT OR IGNORE INTO")
+    with get_db() as db:
+        cur = db.execute(_q(sql), (email.strip().lower(), salt, pass_hash,
+                                   department, role, utcnow()))
+        return cur.rowcount > 0
+
+
+def update_user(email: str, *, department: str | None = None,
+                role: str | None = None, active: int | None = None,
+                salt: str | None = None, pass_hash: str | None = None) -> None:
+    sets, vals = [], []
+    for col, val in (("department", department), ("role", role),
+                     ("active", active), ("salt", salt), ("pass_hash", pass_hash)):
+        if val is not None:
+            sets.append(f"{col} = ?")
+            vals.append(val)
+    if not sets:
+        return
+    vals.append(email.strip().lower())
+    with get_db() as db:
+        db.execute(_q(f"UPDATE users SET {', '.join(sets)} WHERE lower(email) = ?"), vals)
 
 
 def log_event(level: str, source: str, message: str) -> None:

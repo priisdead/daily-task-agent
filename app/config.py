@@ -76,7 +76,34 @@ NOTIFY_TO = os.getenv("NOTIFY_TO", "priyanka@thesolfactory.com")  # comma-separa
 DIGEST_HOUR = int(os.getenv("DIGEST_HOUR", "8"))  # local (TIMEZONE) hour, daily
 
 # App
+# Master admin token (Braj & Lokesh) — sees everything, all pages.
 DASHBOARD_TOKEN = os.getenv("DASHBOARD_TOKEN", "")
+
+# Per-department credentials. Each department gets its own secret token;
+# opening the dashboard with that token shows ONLY that department's tasks.
+# Format: "logistics:tok1,production:tok2,accounts:tok3,design:tok4"
+# (an "admin:tok" entry grants full admin like DASHBOARD_TOKEN).
+DEPT_TOKENS: dict[str, str] = {}   # token -> department
+for _pair in os.getenv("DEPT_TOKENS", "").replace(";", ",").split(","):
+    _pair = _pair.strip()
+    _sep = ":" if ":" in _pair else ("=" if "=" in _pair else None)
+    if not _sep:
+        continue
+    _d, _t = _pair.split(_sep, 1)
+    _d, _t = _d.strip().lower(), _t.strip()
+    if _d and _t:
+        DEPT_TOKENS[_t] = _d
+
+DEPARTMENTS = ["admin", "logistics", "production", "accounts", "design"]
+
+# ── Email login (RBAC) ───────────────────────────────────────────────────────
+# Signs session cookies; set to a long random string in production.
+SECRET_KEY = os.getenv("SECRET_KEY", "")
+# First admin account, created automatically when no users exist yet.
+# Log in with these, then add everyone else on the Users page and change
+# this password from there.
+INIT_ADMIN_EMAIL = os.getenv("INIT_ADMIN_EMAIL", "")
+INIT_ADMIN_PASSWORD = os.getenv("INIT_ADMIN_PASSWORD", "")
 # Postgres connection string (e.g. from Neon). When set, all data lives there
 # and survives restarts/redeploys. When empty, a local SQLite file is used.
 DATABASE_URL = os.getenv("DATABASE_URL", "")

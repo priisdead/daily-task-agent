@@ -70,6 +70,7 @@ Return ONLY a JSON object, no prose, with this exact shape:
       "contact": "phone number or email address",
       "channel": "whatsapp" | "email",
       "request": "one clear sentence: what needs to be done",
+      "department": "admin" | "logistics" | "production" | "accounts" | "design",
       "deadline": "deadline if stated or clearly implied, else \\"\\"",
       "priority": "high" | "normal" | "low",
       "source": "short quote (max 25 words) from the originating message"
@@ -225,9 +226,14 @@ def extract_tasks(open_task_list, wa_msgs, emails) -> dict:
     return data
 
 
+ALLOWED_DEPTS = {"admin", "logistics", "production", "accounts", "design"}
+
+
 def _apply(result: dict, open_task_list: list) -> None:
     """Write an extraction result to the database."""
     for t in result["new_tasks"]:
+        dept = str(t.get("department", "")).lower().strip()
+        t["department"] = dept if dept in ALLOWED_DEPTS else "admin"
         db.add_task(t)
     valid_ids = {t["id"] for t in open_task_list}
     for tid in result["in_progress_task_ids"]:

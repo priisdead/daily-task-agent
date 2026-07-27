@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Users — Task Agent</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap');
+  :root { --bg:#FAF9F7; --surface:#fff; --ink:#1B1D1F; --ink-2:#5C6166;
+    --ink-3:#9AA0A6; --line:#ECEAE6; --accent:#14634E; --amber:#9A5B00; --red:#B3261E; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#121416; --surface:#1A1D20; --ink:#ECEDEE; --ink-2:#A6ACB2;
+      --ink-3:#6E7479; --line:#2A2E32; --accent:#3ECF9A; --amber:#E8A94C; --red:#F2887F; } }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink);
+    font:400 14px/1.55 "Inter",-apple-system,"Segoe UI",sans-serif; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px 80px; }
+  .topbar { display:flex; justify-content:space-between; align-items:center;
+    padding:26px 0 0; flex-wrap:wrap; gap:10px; }
+  .brand { font:600 13px/1 "Inter"; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--ink-3); }
+  .btn { font:500 13px/1 "Inter"; color:var(--ink-2); background:none;
+    border:1px solid var(--line); border-radius:100px; padding:9px 16px;
+    cursor:pointer; text-decoration:none; }
+  .btn:hover { border-color:var(--ink-3); color:var(--ink); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  h1 { font:600 34px/1.15 "Fraunces",Georgia,serif; margin-top:40px; }
+  .lede { color:var(--ink-2); margin:8px 0 24px; max-width:640px; }
+  .msg { background:var(--surface); border:1px solid var(--accent); color:var(--accent);
+    border-radius:10px; padding:10px 16px; margin-bottom:20px; font-weight:500; }
+  .card { background:var(--surface); border:1px solid var(--line);
+    border-radius:14px; padding:20px; margin-bottom:26px; }
+  .card h2 { font:600 15px/1 "Inter"; margin-bottom:14px; }
+  .row-form { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  input, select { font:400 14px/1 "Inter"; color:var(--ink); background:var(--bg);
+    border:1px solid var(--line); border-radius:8px; padding:10px 12px; outline:none; }
+  input:focus, select:focus { border-color:var(--accent); }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font:600 11.5px/1 "Inter"; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--ink-3); padding:10px 8px;
+    border-bottom:1px solid var(--line); }
+  td { padding:12px 8px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  .email { font-weight:600; }
+  .pill { font-size:11.5px; padding:3px 10px; border-radius:100px;
+    border:1px solid var(--line); color:var(--ink-3); }
+  .pill.admin { color:var(--amber); border-color:var(--amber); font-weight:600; }
+  .pill.off { color:var(--red); border-color:var(--red); }
+  .inline { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .small { padding:7px 12px; font-size:12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="brand">Task Agent</span>
+    <div class="inline">
+      <a class="btn" href="/?token={{ token }}">Tasks</a>
+      <a class="btn" href="/mails?token={{ token }}">Mails</a>
+      <span class="btn" style="border-color:var(--ink-3);color:var(--ink);font-weight:600">Users</span>
+    </div>
+  </div>
+
+  <h1>Users</h1>
+  <p class="lede">Each person signs in with their email and automatically sees
+  their department's tasks. Admins see everything. You decide here which
+  email belongs to which department.</p>
+
+  {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+
+  <div class="card">
+    <h2>Add person</h2>
+    <form class="row-form" method="post" action="/users/action?token={{ token }}">
+      <input type="hidden" name="action" value="add">
+      <input name="email" type="email" placeholder="email@thesolfactory.com" required style="flex:2;min-width:220px">
+      <input name="password" type="text" placeholder="starting password (6+ chars)" required style="flex:1;min-width:170px">
+      <select name="department">
+        {% for d in departments %}<option value="{{ d }}">{{ d|capitalize }}</option>{% endfor %}
+      </select>
+      <select name="role">
+        <option value="member">Member</option>
+        <option value="admin">Admin</option>
+      </select>
+      <button class="btn primary" type="submit">Add</button>
+    </form>
+  </div>
+
+  <table>
+    <tr><th>Person</th><th>Department</th><th>Role</th><th>Actions</th></tr>
+    {% for u in users %}
+    <tr>
+      <td>
+        <div class="email">{{ u.email }}</div>
+        {% if not u.active %}<span class="pill off">deactivated</span>{% endif %}
+      </td>
+      <td>
+        <form class="inline" method="post" action="/users/action?token={{ token }}">
+          <input type="hidden" name="action" value="dept">
+          <input type="hidden" name="email" value="{{ u.email }}">
+          <select name="department">
+            {% for d in departments %}
+            <option value="{{ d }}" {% if u.department == d %}selected{% endif %}>{{ d|capitalize }}</option>
+            {% endfor %}
+          </select>
+          <button class="btn small" type="submit">Save</button>
+        </form>
+      </td>
+      <td><span class="pill {{ 'admin' if u.role == 'admin' }}">{{ u.role }}</span></td>
+      <td>
+        <div class="inline">
+          <form class="inline" method="post" action="/users/action?token={{ token }}">
+            <input type="hidden" name="action" value="password">
+            <input type="hidden" name="email" value="{{ u.email }}">
+            <input name="password" type="text" placeholder="new password" style="width:130px">
+            <button class="btn small" type="submit">Reset</button>
+          </form>
+          <form method="post" action="/users/action?token={{ token }}">
+            <input type="hidden" name="action" value="toggle">
+            <input type="hidden" name="email" value="{{ u.email }}">
+            <button class="btn small" type="submit">{{ 'Deactivate' if u.active else 'Reactivate' }}</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+</body>
+</html>

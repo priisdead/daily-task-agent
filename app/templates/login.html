@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in — Task Agent</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap');
+  :root { --bg:#FAF9F7; --surface:#fff; --ink:#1B1D1F; --ink-2:#5C6166;
+    --ink-3:#9AA0A6; --line:#ECEAE6; --accent:#14634E; --red:#B3261E; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#121416; --surface:#1A1D20; --ink:#ECEDEE; --ink-2:#A6ACB2;
+      --ink-3:#6E7479; --line:#2A2E32; --accent:#3ECF9A; --red:#F2887F; } }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink); min-height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    font:400 15px/1.6 "Inter",-apple-system,"Segoe UI",sans-serif; }
+  .card { width:100%; max-width:380px; padding:40px 34px; background:var(--surface);
+    border:1px solid var(--line); border-radius:18px; }
+  .brand { font:600 12px/1 "Inter"; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--ink-3); }
+  h1 { font:600 28px/1.2 "Fraunces",Georgia,serif; margin:14px 0 4px; }
+  .sub { color:var(--ink-2); font-size:14px; margin-bottom:26px; }
+  label { display:block; font:600 12px/1 "Inter"; color:var(--ink-2);
+    margin:16px 0 6px; letter-spacing:.04em; text-transform:uppercase; }
+  input { width:100%; font:400 15px/1 "Inter"; color:var(--ink);
+    background:var(--bg); border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px; outline:none; }
+  input:focus { border-color:var(--accent); }
+  button { width:100%; margin-top:24px; font:600 15px/1 "Inter"; color:#fff;
+    background:var(--accent); border:none; border-radius:100px; padding:14px;
+    cursor:pointer; }
+  button:hover { opacity:.92; }
+  .err { margin-top:16px; color:var(--red); font-size:13.5px; }
+</style>
+</head>
+<body>
+  <form class="card" method="post" action="/login">
+    <div class="brand">Task Agent</div>
+    <h1>Sign in</h1>
+    <div class="sub">Use your company email. Your department's tasks open automatically.</div>
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="email" required autofocus>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+  </form>
+</body>
+</html>

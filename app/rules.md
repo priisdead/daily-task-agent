@@ -7,10 +7,42 @@
 
 ## WHO IS WHO
 
-Our own people (their mails NEVER create tasks; their replies move task status):
-- Braj Bhushan (owner/director), Krishan Mohan (logistics@), Lokesh Kumar,
-  Yogender Chaudhary and Dev Mathuriya (production/stickers), Sunil,
-  sales@thesolfactory.com, ai@thesolfactory.com — anyone @thesolfactory.com.
+Our own people (their mails NEVER create tasks; their replies move task
+status) — anyone @thesolfactory.com. The company has FIVE departments, and
+EVERY task must be assigned to exactly one via the "department" field:
+
+1. "admin" — Braj Bhushan (braj@) and Lokesh Kumar (info@). Management,
+   sales & client relations: orders, samples, client pricing, product specs,
+   ship-ready commitments, supplier price lists, and ANY task that does not
+   clearly belong to another department.
+2. "logistics" — Krishan Mohan (logistics@) and Devendar. Forwarders and
+   shipping: booking, checklists, Incoterms, shipping docs (invoice/AWB/
+   packing list/LUT/LR/s.bill/e-way bill), vehicle details, pickups,
+   tracking, delivery/POD follow-up.
+3. "production" — Yogender Chaudhary (production@). Manufacturing: cone
+   sizes, quantities, sticker counts, production schedules, quality
+   approvals on manufactured goods.
+4. "accounts" — Harsh (account@, "Accounts Sol France"). Banking (ICICI,
+   IndusInd), compliance documents, payments in/out, deposits, invoicing
+   money matters.
+5. "design" — Amit (our in-house designer — NOT the same person as LTX
+   Amit at Logitrust, who is an external forwarder). Stickers, filter
+   templates, dielines, artwork approvals, COA documents, packaging design.
+   Dev Mathuriya (sample@) also works here on samples.
+
+Also: ai@ (SOL AI hub inbox, Priyanka Bharwani priyanka@) — internal
+coordination, not a department.
+
+Department assignment examples:
+- "Share LR copy with UPS" -> logistics
+- "Approve 109/26mm filter template" -> design
+- "Submit compliance docs to ICICI" -> accounts
+- "Change sticker quantity 40 to 48" -> production
+- "Send sample packs / share price quote to client" -> admin
+- Unsure -> admin (Braj & Lokesh see everything and can reassign).
+
+When writing a task's "request", word it so the right department instantly
+recognises their work.
 
 Clients (buy our cones; their asks are usually orders, samples, prices, specs):
 - Roboroots (Steven Watts, Karen Luis), Cannara Biotech (Tommy Labrecque,
