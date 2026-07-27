@@ -94,7 +94,8 @@ for _pair in os.getenv("DEPT_TOKENS", "").replace(";", ",").split(","):
     if _d and _t:
         DEPT_TOKENS[_t] = _d
 
-DEPARTMENTS = ["admin", "logistics", "production", "accounts", "design"]
+DEPARTMENTS = ["admin", "logistics", "production", "accounts", "design",
+               "implementation", "qc", "management"]
 
 # ── Email login (RBAC) ───────────────────────────────────────────────────────
 # Signs session cookies; set to a long random string in production.

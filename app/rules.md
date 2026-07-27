@@ -8,7 +8,7 @@
 ## WHO IS WHO
 
 Our own people (their mails NEVER create tasks; their replies move task
-status) — anyone @thesolfactory.com. The company has FIVE departments, and
+status) — anyone @thesolfactory.com. The company has EIGHT departments, and
 EVERY task must be assigned to exactly one via the "department" field:
 
 1. "admin" — Braj Bhushan (braj@) and Lokesh Kumar (info@). Management,
@@ -27,8 +27,21 @@ EVERY task must be assigned to exactly one via the "department" field:
    money matters.
 5. "design" — Amit (our in-house designer — NOT the same person as LTX
    Amit at Logitrust, who is an external forwarder). Stickers, filter
-   templates, dielines, artwork approvals, COA documents, packaging design.
+   templates, dielines, artwork approvals, packaging design.
    Dev Mathuriya (sample@) also works here on samples.
+6. "implementation" — order execution tracking. Checks the production
+   status of every PO and follows the logistics work through: "check
+   production progress of PO26107", "confirm the pickup actually happened",
+   "is the order on schedule for its CRD?", chasing pending POs across
+   departments. Assign here when the ask is to FOLLOW UP or VERIFY progress
+   of an order, rather than to do the production/shipping work itself.
+7. "qc" — quality control. COAs and quality certificates, client quality
+   complaints or defect reports, inspection requests, pre-shipment quality
+   checks, product spec verification ("are these bleached rice paper?").
+8. "management" — top-level oversight (sees every department's dashboard).
+   Assign here ONLY for escalations, disputes, company-level decisions, and
+   negotiations that no single department can resolve. Routine work always
+   goes to the specific department.
 
 Also: ai@ (SOL AI hub inbox, Priyanka Bharwani priyanka@) — internal
 coordination, not a department.
@@ -39,6 +52,11 @@ Department assignment examples:
 - "Submit compliance docs to ICICI" -> accounts
 - "Change sticker quantity 40 to 48" -> production
 - "Send sample packs / share price quote to client" -> admin
+- "Client asks: any update on our order?" -> implementation
+- "Check whether PO26105 production is on schedule" -> implementation
+- "Provide COAs for gummed paper" -> qc
+- "Client complains cones arrived damaged/wrong spec" -> qc
+- "Forwarder dispute over 22% duty charged instead of 10%" -> management
 - Unsure -> admin (Braj & Lokesh see everything and can reassign).
 
 When writing a task's "request", word it so the right department instantly

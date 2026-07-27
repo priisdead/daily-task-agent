@@ -142,8 +142,10 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
     done_today = db.tasks_done_today(datetime.utcnow().date().isoformat())
     active_ids = {t["id"] for t in tasks} | {t["id"] for t in done_today}
     archive = [t for t in db.all_tasks() if t["id"] not in active_ids]
-    if dept != "admin":
-        # department credential: only this department's tasks
+    if dept not in ("admin", "management"):
+        # department credential: only this department's tasks.
+        # (management is oversight — sees every department's tasks,
+        # but has no admin pages/controls)
         tasks = [t for t in tasks if (t.get("department") or "") == dept]
         done_today = [t for t in done_today if (t.get("department") or "") == dept]
         archive = [t for t in archive if (t.get("department") or "") == dept]

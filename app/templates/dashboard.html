@@ -124,8 +124,8 @@
     </div>
   </div>
 
-  <h1>Today{% if dept != 'admin' %} — {{ dept|capitalize }}{% endif %}</h1>
-  <div class="date">{{ date_str }}{% if dept != 'admin' %} &middot; your department's tasks{% endif %}</div>
+  <h1>Today{% if dept == 'qc' %} — QC{% elif dept != 'admin' %} — {{ dept|capitalize }}{% endif %}</h1>
+  <div class="date">{{ date_str }}{% if dept == 'management' %} &middot; all departments, oversight view{% elif dept != 'admin' %} &middot; your department's tasks{% endif %}</div>
 
   <div class="stats">
     <div class="stat"><div class="n">{{ open_count }}</div><div class="l">Open</div></div>
@@ -171,7 +171,7 @@
             <div class="req">{{ t.request }}</div>
             <div class="meta">
               <span class="tag">{{ t.channel }}</span>
-              {% if dept == 'admin' and t.department %} &middot; <span class="tag">{{ t.department }}</span>{% endif %}
+              {% if dept in ('admin', 'management') and t.department %} &middot; <span class="tag">{{ t.department }}</span>{% endif %}
               {% if t.status == 'in_progress' %} &middot; <span class="tag progress">in progress</span>{% endif %}
               {% if t.priority == 'high' %} &middot; <span class="tag high">high priority</span>{% endif %}
             </div>

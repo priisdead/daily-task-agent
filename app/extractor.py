@@ -70,7 +70,7 @@ Return ONLY a JSON object, no prose, with this exact shape:
       "contact": "phone number or email address",
       "channel": "whatsapp" | "email",
       "request": "one clear sentence: what needs to be done",
-      "department": "admin" | "logistics" | "production" | "accounts" | "design",
+      "department": __DEPT_OPTIONS__,
       "deadline": "deadline if stated or clearly implied, else \\"\\"",
       "priority": "high" | "normal" | "low",
       "source": "short quote (max 25 words) from the originating message"
@@ -98,7 +98,8 @@ Rules:
 - The COMPANY RULEBOOK below (if present) OVERRIDES these general rules
   wherever they conflict — especially for when a shipment task may be
   marked done.
-""" + _load_rules()
+""".replace("__DEPT_OPTIONS__",
+            " | ".join(f'"{d}"' for d in config.DEPARTMENTS)) + _load_rules()
 
 
 def _format_context(open_task_list, wa_msgs, emails) -> str:
@@ -226,7 +227,7 @@ def extract_tasks(open_task_list, wa_msgs, emails) -> dict:
     return data
 
 
-ALLOWED_DEPTS = {"admin", "logistics", "production", "accounts", "design"}
+ALLOWED_DEPTS = set(config.DEPARTMENTS)
 
 
 def _apply(result: dict, open_task_list: list) -> None:
