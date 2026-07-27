@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orders — Task Agent</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap');
+  :root { --bg:#FAF9F7; --surface:#fff; --ink:#1B1D1F; --ink-2:#5C6166;
+    --ink-3:#9AA0A6; --line:#ECEAE6; --accent:#14634E; --amber:#9A5B00; --red:#B3261E; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#121416; --surface:#1A1D20; --ink:#ECEDEE; --ink-2:#A6ACB2;
+      --ink-3:#6E7479; --line:#2A2E32; --accent:#3ECF9A; --amber:#E8A94C; --red:#F2887F; } }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink);
+    font:400 14px/1.55 "Inter",-apple-system,"Segoe UI",sans-serif; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px 80px; }
+  .topbar { display:flex; justify-content:space-between; align-items:center;
+    padding:26px 0 0; flex-wrap:wrap; gap:10px; }
+  .brand { font:600 13px/1 "Inter"; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--ink-3); }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .btn { font:500 13px/1 "Inter"; color:var(--ink-2); background:none;
+    border:1px solid var(--line); border-radius:100px; padding:9px 16px;
+    cursor:pointer; text-decoration:none; }
+  .btn:hover { border-color:var(--ink-3); color:var(--ink); }
+  .btn.active { color:var(--ink); border-color:var(--ink-3); font-weight:600; }
+  h1 { font:600 34px/1.15 "Fraunces",Georgia,serif; margin-top:40px; }
+  .lede { color:var(--ink-2); margin:8px 0 26px; max-width:640px; }
+  .po { display:flex; align-items:center; gap:14px; padding:16px 0;
+    border-bottom:1px solid var(--line); text-decoration:none; color:inherit; }
+  .po:hover { background:color-mix(in srgb, var(--accent) 3%, transparent); }
+  .ponum { font:600 15px/1 "Inter"; min-width:130px; color:var(--accent); }
+  .grow { flex:1; min-width:0; }
+  .client { font-weight:500; }
+  .sub { font-size:12.5px; color:var(--ink-3); margin-top:2px; }
+  .pill { font-size:11.5px; font-weight:600; padding:4px 12px; border-radius:100px;
+    border:1px solid var(--line); color:var(--ink-2); white-space:nowrap; }
+  .pill.received { color:var(--ink-2); }
+  .pill.in_production { color:var(--amber); border-color:var(--amber); }
+  .pill.ready { color:var(--accent); border-color:var(--accent); }
+  .pill.shipped { color:var(--accent); border-color:var(--accent); }
+  .pill.delivered { color:#fff; background:var(--accent); border-color:var(--accent); }
+  .pill.paid { color:#fff; background:var(--accent); border-color:var(--accent); }
+  .pill.cancelled { color:var(--red); border-color:var(--red); }
+  .open-badge { font-size:11.5px; font-weight:600; color:#fff; background:var(--red);
+    border-radius:100px; padding:4px 10px; white-space:nowrap; }
+  .none { padding:24px 0; color:var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="brand">Task Agent</span>
+    <div class="actions">
+      <a class="btn" href="/?token={{ token }}">Tasks</a>
+      <span class="btn active">Orders</span>
+      {% if dept == 'admin' %}
+      <a class="btn" href="/mails?token={{ token }}">Mails</a>
+      <a class="btn" href="/users?token={{ token }}">Users</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <h1>Orders</h1>
+  <p class="lede">Every purchase order the agent has seen in the mail, with its
+  status and outstanding work. Click one for its full history.</p>
+
+  {% for p in pos %}
+  <a class="po" href="/orders/{{ p.po_number }}?token={{ token }}">
+    <span class="ponum">{{ p.po_number }}</span>
+    <span class="grow">
+      <span class="client">{{ p.client or "—" }}</span>
+      <span class="sub">first seen {{ p.created_at[:10] }} &middot; {{ p.task_total }} task{{ '' if p.task_total == 1 else 's' }}</span>
+    </span>
+    {% if p.task_open %}<span class="open-badge">{{ p.task_open }} open</span>{% endif %}
+    <span class="pill {{ p.status }}">{{ p.status.replace('_',' ') }}</span>
+  </a>
+  {% else %}
+  <div class="none">No purchase orders detected yet — they'll appear here as
+  the AI reads mail mentioning PO numbers.</div>
+  {% endfor %}
+</div>
+</body>
+</html>

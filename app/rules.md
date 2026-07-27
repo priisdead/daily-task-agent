@@ -146,8 +146,10 @@ because a small task inside it finished.
 
 ## GENERAL
 
-- PO numbers look like PO26xxx; Cannara POs look like QCPOxxxxxx. Mention
-  the PO number in the task request text whenever it appears in the mail.
+- PO numbers look like PO26xxx; Cannara POs look like QCPOxxxxxx. ALWAYS
+  fill the task's "po_number" field when a PO/order number appears in or is
+  clearly implied by the mail — this links the task to the order's record.
+  Also mention the PO number in the task request text.
 - The same PO discussed by client AND forwarder = one shipment; link the
   work in your head, don't duplicate tasks.
 - When genuinely unsure between in_progress and done: choose in_progress.

@@ -143,6 +143,9 @@
     <span class="brand">Task Agent</span>
     <div class="actions">
       <a class="btn active" href="/?token={{ token }}">Tasks</a>
+      {% if dept in ('admin', 'management', 'implementation') %}
+      <a class="btn" href="/orders?token={{ token }}">Orders</a>
+      {% endif %}
       {% if dept == 'admin' %}
       <a class="btn" href="/mails?token={{ token }}">Mails</a>
       <a class="btn" href="/whatsapp?token={{ token }}">WhatsApp</a>
@@ -232,6 +235,7 @@
             <div class="req">{{ t.request }}</div>
             <div class="meta">
               <span class="tag">{{ t.channel }}</span>
+              {% if t.po_number %} &middot; {% if dept in ('admin', 'management', 'implementation') %}<a class="tag" style="color:var(--accent);text-decoration:none;font-weight:600" href="/orders/{{ t.po_number }}?token={{ token }}">{{ t.po_number }}</a>{% else %}<span class="tag">{{ t.po_number }}</span>{% endif %}{% endif %}
               {% if dept in ('admin', 'management') and t.department %} &middot; <span class="tag">{{ t.department }}</span>{% endif %}
               {% if t.status == 'in_progress' %} &middot; <span class="tag progress">in progress</span>{% endif %}
               {% if t.priority == 'high' %} &middot; <span class="tag high">high priority</span>{% endif %}

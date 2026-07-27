@@ -71,6 +71,7 @@ Return ONLY a JSON object, no prose, with this exact shape:
       "channel": "whatsapp" | "email",
       "request": "one clear sentence: what needs to be done",
       "department": __DEPT_OPTIONS__,
+      "po_number": "the purchase-order number this task relates to, exactly as written (e.g. PO26107, QCPO006726), else \\"\\"",
       "deadline": "deadline if stated or clearly implied, else \\"\\"",
       "priority": "high" | "normal" | "low",
       "source": "short quote (max 25 words) from the originating message"
@@ -235,7 +236,14 @@ def _apply(result: dict, open_task_list: list) -> None:
     for t in result["new_tasks"]:
         dept = str(t.get("department", "")).lower().strip()
         t["department"] = dept if dept in ALLOWED_DEPTS else "admin"
+        po = str(t.get("po_number", "")).strip().upper()[:40]
+        t["po_number"] = po
         db.add_task(t)
+        if po:
+            try:
+                db.upsert_po(po, t.get("client", ""))
+            except Exception:
+                log.exception("could not upsert PO %s (non-fatal)", po)
     valid_ids = {t["id"] for t in open_task_list}
     for tid in result["in_progress_task_ids"]:
         if isinstance(tid, int) and tid in valid_ids:

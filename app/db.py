@@ -84,6 +84,16 @@ CREATE TABLE IF NOT EXISTS events (
     created_at  TEXT
 );
 
+CREATE TABLE IF NOT EXISTS purchase_orders (
+    id          {_ID},
+    po_number   TEXT UNIQUE,
+    client      TEXT,
+    status      TEXT DEFAULT 'received',
+    notes       TEXT DEFAULT '',
+    created_at  TEXT,
+    updated_at  TEXT
+);
+
 CREATE TABLE IF NOT EXISTS users (
     id          {_ID},
     email       TEXT UNIQUE,
@@ -138,8 +148,8 @@ def init_db() -> None:
             db.execute("ALTER TABLE tasks ADD COLUMN department TEXT DEFAULT ''")
     except Exception:
         pass  # column already there
-    # migrations for completion remarks
-    for _col in ("remark", "done_by"):
+    # migrations for completion remarks + PO linkage
+    for _col in ("remark", "done_by", "po_number"):
         try:
             with get_db() as db:
                 db.execute(f"ALTER TABLE tasks ADD COLUMN {_col} TEXT DEFAULT ''")
@@ -188,11 +198,12 @@ def add_task(t: dict) -> None:
     with get_db() as db:
         db.execute(
             _q("INSERT INTO tasks (client, contact, channel, request, department,"
-               " deadline, priority, source, status, created_at, updated_at)"
-               " VALUES (?,?,?,?,?,?,?,?,?,?,?)"),
+               " po_number, deadline, priority, source, status, created_at, updated_at)"
+               " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"),
             (
                 t.get("client", "Unknown"), t.get("contact", ""), t.get("channel", ""),
-                t.get("request", ""), t.get("department", ""), t.get("deadline", ""),
+                t.get("request", ""), t.get("department", ""),
+                t.get("po_number", ""), t.get("deadline", ""),
                 t.get("priority", "normal"), t.get("source", ""), "open", now, now,
             ),
         )
@@ -227,6 +238,84 @@ def mark_processed(table: str, ids: list) -> None:
     with get_db() as db:
         placeholders = ",".join("?" * len(ids))
         db.execute(_q(f"UPDATE {table} SET processed = 1 WHERE id IN ({placeholders})"), ids)
+
+
+# ── purchase orders ──────────────────────────────────────────────────────────
+
+def upsert_po(po_number: str, client: str = "") -> None:
+    """Create the PO record if it doesn't exist yet (first sighting)."""
+    po_number = (po_number or "").strip().upper()
+    if not po_number:
+        return
+    now = utcnow()
+    sql = ("INSERT INTO purchase_orders (po_number, client, status, created_at,"
+           " updated_at) VALUES (?,?,?,?,?)")
+    sql += " ON CONFLICT (po_number) DO NOTHING" if IS_PG else ""
+    if not IS_PG:
+        sql = sql.replace("INSERT INTO", "INSERT OR IGNORE INTO")
+    with get_db() as db:
+        db.execute(_q(sql), (po_number, client or "", "received", now, now))
+        # backfill client name if we learn it later
+        if client:
+            db.execute(
+                _q("UPDATE purchase_orders SET client = ? "
+                   "WHERE po_number = ? AND (client IS NULL OR client = '')"),
+                (client, po_number))
+
+
+def list_pos() -> list:
+    """POs with open/total task counts, newest first."""
+    with get_db() as db:
+        pos = _rows(db.execute("SELECT * FROM purchase_orders ORDER BY id DESC"))
+        counts = _rows(db.execute(
+            "SELECT po_number, COUNT(*) AS total,"
+            " SUM(CASE WHEN status IN ('open','in_progress') THEN 1 ELSE 0 END) AS open_n"
+            " FROM tasks WHERE po_number <> '' GROUP BY po_number"))
+    by_po = {c["po_number"]: c for c in counts}
+    for p in pos:
+        c = by_po.get(p["po_number"], {})
+        p["task_total"] = c.get("total", 0) or 0
+        p["task_open"] = c.get("open_n", 0) or 0
+    return pos
+
+
+def get_po(po_number: str) -> dict | None:
+    with get_db() as db:
+        rows = _rows(db.execute(
+            _q("SELECT * FROM purchase_orders WHERE po_number = ?"),
+            (po_number.strip().upper(),)))
+        return rows[0] if rows else None
+
+
+def update_po(po_number: str, *, status: str | None = None,
+              notes: str | None = None, client: str | None = None) -> None:
+    sets, vals = ["updated_at = ?"], [utcnow()]
+    for col, val in (("status", status), ("notes", notes), ("client", client)):
+        if val is not None:
+            sets.append(f"{col} = ?")
+            vals.append(val)
+    vals.append(po_number.strip().upper())
+    with get_db() as db:
+        db.execute(_q(f"UPDATE purchase_orders SET {', '.join(sets)}"
+                      " WHERE po_number = ?"), vals)
+
+
+def tasks_for_po(po_number: str) -> list:
+    with get_db() as db:
+        return _rows(db.execute(
+            _q("SELECT * FROM tasks WHERE po_number = ? ORDER BY id DESC"),
+            (po_number.strip().upper(),)))
+
+
+def emails_mentioning(text: str, limit: int = 100) -> list:
+    like = f"%{text.strip()}%"
+    op = "ILIKE" if IS_PG else "LIKE"   # case-insensitive on both engines
+    with get_db() as db:
+        return _rows(db.execute(
+            _q(f"SELECT id, account, direction, sender, subject, snippet, ts"
+               f" FROM emails WHERE subject {op} ? OR snippet {op} ? OR body {op} ?"
+               f" ORDER BY id DESC LIMIT ?"),
+            (like, like, like, limit)))
 
 
 # ── users (email login / RBAC) ───────────────────────────────────────────────

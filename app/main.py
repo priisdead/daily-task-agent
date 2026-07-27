@@ -368,6 +368,58 @@ async def stats(request: Request, token: str = Query("")):
     return db.pipeline_stats()
 
 
+# ── Orders (purchase orders) ─────────────────────────────────────────────────
+
+def _orders_access(request: Request, token: str) -> str:
+    """Orders pages: admin, management (oversight) and implementation
+    (their whole job is tracking POs)."""
+    dept = _dept_for(request, token)
+    if dept not in ("admin", "management", "implementation"):
+        raise HTTPException(status_code=403, detail="no access to orders")
+    return dept
+
+
+@app.get("/orders", response_class=HTMLResponse)
+async def orders_page(request: Request, token: str = Query("")):
+    dept = _orders_access(request, token)
+    return templates.TemplateResponse(
+        request, "orders.html",
+        {"token": token, "dept": dept, "pos": db.list_pos(),
+         "statuses": config.PO_STATUSES},
+    )
+
+
+@app.get("/orders/{po_number}", response_class=HTMLResponse)
+async def order_detail(request: Request, po_number: str, token: str = Query("")):
+    dept = _orders_access(request, token)
+    po = db.get_po(po_number)
+    if not po:
+        raise HTTPException(status_code=404, detail="unknown PO")
+    return templates.TemplateResponse(
+        request, "order_detail.html",
+        {"token": token, "dept": dept, "po": po,
+         "statuses": config.PO_STATUSES,
+         "tasks": db.tasks_for_po(po_number),
+         "mails": db.emails_mentioning(po["po_number"], limit=50)},
+    )
+
+
+@app.post("/orders/{po_number}/update")
+async def order_update(request: Request, po_number: str, token: str = Query("")):
+    dept = _orders_access(request, token)
+    if dept == "management":
+        raise HTTPException(status_code=403, detail="management is view-only")
+    form = await request.form()
+    status = str(form.get("status", "")).lower().strip()
+    notes = form.get("notes")
+    db.update_po(
+        po_number,
+        status=status if status in config.PO_STATUSES else None,
+        notes=str(notes)[:1000] if notes is not None else None,
+    )
+    return RedirectResponse(url=f"/orders/{po_number}?token={token}", status_code=303)
+
+
 @app.get("/report.pdf")
 async def report_pdf(request: Request, token: str = Query(""), date: str = Query("")):
     """Downloadable daily report: every department's tasks for the chosen

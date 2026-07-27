@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ po.po_number }} — Task Agent</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap');
+  :root { --bg:#FAF9F7; --surface:#fff; --ink:#1B1D1F; --ink-2:#5C6166;
+    --ink-3:#9AA0A6; --line:#ECEAE6; --accent:#14634E; --amber:#9A5B00; --red:#B3261E; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#121416; --surface:#1A1D20; --ink:#ECEDEE; --ink-2:#A6ACB2;
+      --ink-3:#6E7479; --line:#2A2E32; --accent:#3ECF9A; --amber:#E8A94C; --red:#F2887F; } }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink);
+    font:400 14px/1.55 "Inter",-apple-system,"Segoe UI",sans-serif; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px 80px; }
+  .topbar { display:flex; justify-content:space-between; align-items:center;
+    padding:26px 0 0; flex-wrap:wrap; gap:10px; }
+  .brand { font:600 13px/1 "Inter"; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--ink-3); }
+  .btn { font:500 13px/1 "Inter"; color:var(--ink-2); background:none;
+    border:1px solid var(--line); border-radius:100px; padding:9px 16px;
+    cursor:pointer; text-decoration:none; }
+  .btn:hover { border-color:var(--ink-3); color:var(--ink); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  h1 { font:600 34px/1.15 "Fraunces",Georgia,serif; margin-top:40px; }
+  .client { color:var(--ink-2); margin-top:4px; }
+  .controls { display:flex; gap:10px; margin:22px 0; flex-wrap:wrap;
+    align-items:center; background:var(--surface); border:1px solid var(--line);
+    border-radius:14px; padding:14px 16px; }
+  .controls select, .controls input { font:400 13.5px/1 "Inter"; color:var(--ink);
+    background:var(--bg); border:1px solid var(--line); border-radius:8px;
+    padding:10px 12px; outline:none; }
+  .controls input { flex:1; min-width:200px; }
+  h2 { font:600 12px/1 "Inter"; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--ink-3); margin:36px 0 6px; }
+  .row { display:flex; gap:14px; padding:13px 0; border-bottom:1px solid var(--line); }
+  .grow { flex:1; min-width:0; }
+  .req { font-weight:500; }
+  .req.done { color:var(--ink-3); text-decoration:line-through; font-weight:400; }
+  .meta { font-size:12.5px; color:var(--ink-3); margin-top:2px; }
+  .remark { font-size:12.5px; color:var(--accent); margin-top:3px; }
+  .pill { flex:none; align-self:flex-start; font-size:11.5px; font-weight:600;
+    padding:3px 10px; border-radius:100px; border:1px solid var(--line);
+    color:var(--ink-2); }
+  .pill.open { color:var(--red); border-color:var(--red); }
+  .pill.in_progress { color:var(--amber); border-color:var(--amber); }
+  .pill.done { color:var(--accent); border-color:var(--accent); }
+  .when { flex:none; width:110px; color:var(--ink-3); font-size:12px; padding-top:2px; }
+  .none { padding:14px 0; color:var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="brand">Task Agent</span>
+    <div style="display:flex;gap:8px">
+      <a class="btn" href="/orders?token={{ token }}">&larr; All orders</a>
+      <a class="btn" href="/?token={{ token }}">Tasks</a>
+    </div>
+  </div>
+
+  <h1>{{ po.po_number }}</h1>
+  <div class="client">{{ po.client or "client unknown" }} &middot; first seen {{ po.created_at[:10] }}</div>
+
+  <form class="controls" method="post" action="/orders/{{ po.po_number }}/update?token={{ token }}">
+    <select name="status" {% if dept == 'management' %}disabled{% endif %}>
+      {% for s in statuses %}
+      <option value="{{ s }}" {% if po.status == s %}selected{% endif %}>{{ s.replace('_',' ') }}</option>
+      {% endfor %}
+    </select>
+    <input name="notes" value="{{ po.notes }}" placeholder="Notes (value, terms, anything worth remembering)"
+           {% if dept == 'management' %}disabled{% endif %}>
+    {% if dept != 'management' %}<button class="btn primary" type="submit">Save</button>{% endif %}
+  </form>
+
+  <h2>Tasks on this order &middot; {{ tasks|length }}</h2>
+  {% for t in tasks %}
+  <div class="row">
+    <div class="grow">
+      <div class="req {{ 'done' if t.status == 'done' }}">{{ t.request }}</div>
+      <div class="meta">{{ t.department or '—' }}{% if t.deadline %} &middot; due {{ t.deadline }}{% endif %}</div>
+      {% if t.remark %}<div class="remark">Remark: {{ t.remark }}{% if t.done_by %} &middot; {{ t.done_by }}{% endif %}</div>{% endif %}
+    </div>
+    <span class="pill {{ t.status }}">{{ t.status.replace('_',' ') }}</span>
+  </div>
+  {% else %}
+  <div class="none">No tasks linked yet.</div>
+  {% endfor %}
+
+  <h2>Mail history mentioning {{ po.po_number }} &middot; {{ mails|length }}</h2>
+  {% for e in mails %}
+  <div class="row">
+    <div class="when">{{ e.ts[:16] }}</div>
+    <div class="grow">
+      <div class="req" style="font-weight:600">{{ e.sender }}{% if e.direction == 'outgoing' %} <span style="color:var(--accent);font-size:11px">(your reply)</span>{% endif %}</div>
+      <div class="meta">{{ e.subject or "(no subject)" }}</div>
+      <div class="meta">{{ e.snippet }}</div>
+    </div>
+  </div>
+  {% else %}
+  <div class="none">No mails found mentioning this PO.</div>
+  {% endfor %}
+</div>
+</body>
+</html>
