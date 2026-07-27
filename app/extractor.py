@@ -4,12 +4,29 @@ import logging
 import re
 import threading
 import time
+from pathlib import Path
 
 import httpx
 
 from . import config, db
 
 log = logging.getLogger("extractor")
+
+# Company-specific business logic lives in rules.md (plain language, model-
+# agnostic). It is appended to the system prompt for EVERY provider, so
+# switching Gemini <-> Claude keeps the same behaviour.
+RULES_PATH = Path(__file__).resolve().parent / "rules.md"
+
+
+def _load_rules() -> str:
+    try:
+        text = RULES_PATH.read_text(encoding="utf-8").strip()
+        return f"\n\n## COMPANY RULEBOOK (follow strictly)\n\n{text}" if text else ""
+    except FileNotFoundError:
+        return ""
+    except Exception:
+        log.exception("could not read rules.md — continuing without it")
+        return ""
 
 SYSTEM_PROMPT = """You are a task-extraction engine for a manufacturing and \
 export business. Its mail involves clients, logistics partners and freight \
@@ -77,7 +94,10 @@ Rules:
 - Never invent deadlines. Keep the sender's own wording for dates ("Friday",
   "by month end").
 - priority is "high" only when urgency is explicit or a deadline is within ~48h.
-"""
+- The COMPANY RULEBOOK below (if present) OVERRIDES these general rules
+  wherever they conflict — especially for when a shipment task may be
+  marked done.
+""" + _load_rules()
 
 
 def _format_context(open_task_list, wa_msgs, emails) -> str:
