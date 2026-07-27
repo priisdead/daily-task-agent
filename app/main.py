@@ -107,6 +107,15 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
     by_client: dict[str, list] = {}
     for t in tasks:
         by_client.setdefault(t["client"] or "Unknown", []).append(t)
+
+    def _group_order(item):
+        _, ts = item
+        has_high = any(x.get("priority") == "high" for x in ts)
+        has_deadline = any((x.get("deadline") or "").strip() for x in ts)
+        # urgent clients first, then busiest
+        return (0 if has_high else (1 if has_deadline else 2), -len(ts))
+
+    by_client = dict(sorted(by_client.items(), key=_group_order))
     return templates.TemplateResponse(
         request,
         "dashboard.html",

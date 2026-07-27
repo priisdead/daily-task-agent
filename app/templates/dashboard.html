@@ -59,11 +59,33 @@
 
   .client { font: 600 12px/1 "Inter"; letter-spacing: .1em; text-transform: uppercase;
     color: var(--ink-3); margin: 38px 0 4px; }
+
+  /* ── collapsible client folders ── */
+  details.folder { border-bottom: 1px solid var(--line); }
+  details.folder > summary { list-style: none; cursor: pointer; display: flex;
+    align-items: center; gap: 10px; padding: 15px 2px; user-select: none; }
+  details.folder > summary::-webkit-details-marker { display: none; }
+  details.folder > summary::before { content: "\25B8"; color: var(--ink-3);
+    font-size: 12px; transition: transform .15s; }
+  details.folder[open] > summary::before { transform: rotate(90deg); }
+  .fname { font-weight: 600; font-size: 15px; }
+  .fcount { font-size: 12.5px; color: var(--ink-3); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 100px; padding: 2px 9px; }
+  .badge { font-size: 11.5px; font-weight: 600; border-radius: 100px;
+    padding: 3px 10px; }
+  .badge.red { color: #fff; background: var(--red); }
+  .badge.amber { color: var(--amber); border: 1px solid var(--amber); }
+  details.folder > .fbody { padding: 0 0 8px 22px; }
+
   .task { display: flex; align-items: flex-start; gap: 14px;
-    padding: 16px 0; border-bottom: 1px solid var(--line); }
-  .dot { flex: none; width: 8px; height: 8px; border-radius: 50%;
-    margin-top: 8px; background: var(--accent); }
-  .dot.progress { background: var(--amber); }
+    padding: 12px 0 12px 12px; border-bottom: 1px solid var(--line);
+    border-left: 3px solid var(--accent); margin: 6px 0; }
+  .task:last-child { border-bottom: none; }
+  .task.high { border-left-color: var(--red); background:
+    color-mix(in srgb, var(--red) 4%, transparent); }
+  .task.progress-edge { border-left-color: var(--amber); }
+  .due { font-size: 12px; font-weight: 600; color: var(--red);
+    border: 1px solid var(--red); border-radius: 100px; padding: 2px 9px; }
   .grow { flex: 1; min-width: 0; }
   .req { font-weight: 500; }
   .meta { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
@@ -80,7 +102,7 @@
 
   .done-h { margin-top: 48px; }
   .done .req { color: var(--done); text-decoration: line-through; font-weight: 400; }
-  .done .dot { background: var(--done); }
+  .task.done { border-left-color: var(--done); background: none; }
 </style>
 </head>
 <body>
@@ -128,56 +150,77 @@
   {% endif %}
 
   {% for client, tasks in by_client.items() %}
-    <div class="client"><a href="/?token={{ token }}&q={{ client|urlencode }}"
-      style="color:inherit;text-decoration:none">{{ client }}</a></div>
-    {% for t in tasks %}
-      <div class="task">
-        <span class="dot{% if t.status == 'in_progress' %} progress{% endif %}"></span>
-        <div class="grow">
-          <div class="req">{{ t.request }}</div>
-          <div class="meta">
-            {% if t.deadline %}Due <b>{{ t.deadline }}</b> &middot; {% endif %}
-            <span class="tag">{{ t.channel }}</span>
-            {% if t.status == 'in_progress' %} &middot; <span class="tag progress">in progress</span>{% endif %}
-            {% if t.priority == 'high' %} &middot; <span class="tag high">high priority</span>{% endif %}
+    {% set high_n = tasks | selectattr('priority', 'equalto', 'high') | list | length %}
+    {% set prog_n = tasks | selectattr('status', 'equalto', 'in_progress') | list | length %}
+    <details class="folder"{% if high_n or q %} open{% endif %}>
+      <summary>
+        <span class="fname">{{ client }}</span>
+        <span class="fcount">{{ tasks|length }}</span>
+        {% if high_n %}<span class="badge red">{{ high_n }} high</span>{% endif %}
+        {% if prog_n %}<span class="badge amber">{{ prog_n }} in progress</span>{% endif %}
+      </summary>
+      <div class="fbody">
+      {% for t in tasks %}
+        <div class="task{% if t.priority == 'high' %} high{% elif t.status == 'in_progress' %} progress-edge{% endif %}">
+          <div class="grow">
+            <div class="req">{{ t.request }}</div>
+            <div class="meta">
+              <span class="tag">{{ t.channel }}</span>
+              {% if t.status == 'in_progress' %} &middot; <span class="tag progress">in progress</span>{% endif %}
+              {% if t.priority == 'high' %} &middot; <span class="tag high">high priority</span>{% endif %}
+            </div>
+            {% if t.source %}<div class="src">&ldquo;{{ t.source }}&rdquo;</div>{% endif %}
           </div>
-          {% if t.source %}<div class="src">&ldquo;{{ t.source }}&rdquo;</div>{% endif %}
+          {% if t.deadline %}<span class="due">Due {{ t.deadline }}</span>{% endif %}
+          <form method="post" action="/tasks/{{ t.id }}/done?token={{ token }}">
+            <button class="btn" type="submit">Done</button>
+          </form>
         </div>
-        <form method="post" action="/tasks/{{ t.id }}/done?token={{ token }}">
-          <button class="btn" type="submit">Done</button>
-        </form>
+      {% endfor %}
       </div>
-    {% endfor %}
+    </details>
   {% endfor %}
 
   {% if done_today %}
-  <div class="client done-h">Completed today</div>
-  {% for t in done_today %}
-    <div class="task done">
-      <span class="dot"></span>
-      <div class="grow">
-        <div class="req">{{ t.request }}</div>
-        <div class="meta">{{ t.client }}</div>
+  <details class="folder done-h">
+    <summary>
+      <span class="fname">Completed today</span>
+      <span class="fcount">{{ done_today|length }}</span>
+    </summary>
+    <div class="fbody">
+    {% for t in done_today %}
+      <div class="task done">
+        <div class="grow">
+          <div class="req">{{ t.request }}</div>
+          <div class="meta">{{ t.client }}</div>
+        </div>
+        <form method="post" action="/tasks/{{ t.id }}/reopen?token={{ token }}">
+          <button class="btn" type="submit">Reopen</button>
+        </form>
       </div>
-      <form method="post" action="/tasks/{{ t.id }}/reopen?token={{ token }}">
-        <button class="btn" type="submit">Reopen</button>
-      </form>
+    {% endfor %}
     </div>
-  {% endfor %}
+  </details>
   {% endif %}
 
   {% if archive %}
-  <div class="client done-h">Earlier tasks</div>
-  {% for t in archive %}
-    <div class="task done">
-      <span class="dot"></span>
-      <div class="grow">
-        <div class="req">{{ t.request }}</div>
-        <div class="meta">{{ t.client }} &middot; {{ t.created_at[:10] }}</div>
+  <details class="folder">
+    <summary>
+      <span class="fname">Earlier tasks</span>
+      <span class="fcount">{{ archive|length }}</span>
+    </summary>
+    <div class="fbody">
+    {% for t in archive %}
+      <div class="task done">
+        <div class="grow">
+          <div class="req">{{ t.request }}</div>
+          <div class="meta">{{ t.client }} &middot; {{ t.created_at[:10] }}</div>
+        </div>
+        <span class="pill {{ t.status }}">{{ t.status.replace('_',' ') }}</span>
       </div>
-      <span class="pill {{ t.status }}">{{ t.status.replace('_',' ') }}</span>
+    {% endfor %}
     </div>
-  {% endfor %}
+  </details>
   {% endif %}
 </div>
 </body>
