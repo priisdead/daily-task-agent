@@ -150,7 +150,7 @@ def _matches(t: dict, q: str) -> bool:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, token: str = Query(""), q: str = Query("")):
+async def dashboard(request: Request, token: str = Query(""), q: str = Query(""), po: str = Query("")):
     try:
         dept = _dept_for(request, token)
     except HTTPException:
@@ -159,6 +159,7 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
     tz = ZoneInfo(config.TIMEZONE)
     today = datetime.now(tz)
     query = q.strip().lower()
+    po_filter = po.strip().upper()
     tasks = db.open_tasks()
     done_today = db.tasks_done_today(datetime.utcnow().date().isoformat())
     active_ids = {t["id"] for t in tasks} | {t["id"] for t in done_today}
@@ -170,6 +171,11 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
         tasks = [t for t in tasks if (t.get("department") or "") == dept]
         done_today = [t for t in done_today if (t.get("department") or "") == dept]
         archive = [t for t in archive if (t.get("department") or "") == dept]
+    if po_filter:
+        # Filter by PO number (from production page deep-link)
+        tasks = [t for t in tasks if (t.get("po_number") or "").upper() == po_filter]
+        done_today = [t for t in done_today if (t.get("po_number") or "").upper() == po_filter]
+        archive = [t for t in archive if (t.get("po_number") or "").upper() == po_filter]
     if query:
         tasks = [t for t in tasks if _matches(t, query)]
         done_today = [t for t in done_today if _matches(t, query)]
@@ -195,6 +201,7 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
             "departments": config.DEPARTMENTS,
             "user_email": (user or {}).get("email", ""),
             "q": q.strip(),
+            "po": po_filter,
             "date_str": today.strftime("%A, %d %B %Y"),
             "by_client": by_client,
             "open_count": sum(1 for t in tasks if t["status"] == "open"),
@@ -618,40 +625,62 @@ async def production_page(request: Request, token: str = Query("")):
     from datetime import date as _date, timedelta as _td
     today = datetime.now(ZoneInfo(config.TIMEZONE)).date()
     horizon = today + _td(days=config.SHEET_RISK_DAYS)
-    rows = db.production_all()
-    overdue = at_risk = complete = running = 0
-    for r in rows:
-        r["at_risk"] = r["overdue"] = False
-        if r["pending_qty"] <= 0:
-            complete += 1
+
+    # The factory's own Status column is the truth; quantity columns are
+    # often stale. Classify by status FIRST, then by dates. Where numbers
+    # contradict the status, flag it instead of raising a false alarm.
+    buckets = {"late": [], "soon": [], "running": [], "hold": [], "complete": []}
+    for r in db.production_all():
+        st = (r.get("sheet_status") or "").strip().lower()
+        pct = 0
+        if r["po_qty"] > 0:
+            pct = min(100, int(round(100 * r["done_qty"] / r["po_qty"])))
+        r["pct"] = pct
+        r["flag"] = ""
+        r["when"] = ""
+        if r["pending_qty"] > r["po_qty"] > 0:
+            r["flag"] = "numbers don't add up — check sheet"
+        if any(w in st for w in ("complete", "done", "shipped", "dispatch")):
+            if r["pending_qty"] > 0 and not r["flag"]:
+                r["flag"] = (f"sheet says {st or 'complete'} but "
+                             f"{r['pending_qty']:,} pcs still show pending")
+            r["pct"] = 100 if not r["flag"] else pct
+            buckets["complete"].append(r)
             continue
-        running += 1
+        if "hold" in st or "cancel" in st:
+            r["when"] = "on hold" if "hold" in st else "cancelled"
+            buckets["hold"].append(r)
+            continue
+        if r["pending_qty"] <= 0:
+            buckets["complete"].append(r)
+            continue
         try:
             ready = _date.fromisoformat(r.get("ship_ready") or "")
         except ValueError:
+            buckets["running"].append(r)
             continue
-        if ready < today:
-            r["overdue"] = r["at_risk"] = True
-            overdue += 1
-        elif ready <= horizon:
-            r["at_risk"] = True
-            at_risk += 1
+        days = (ready - today).days
+        if days < 0:
+            r["when"] = f"late by {-days} day{'s' if days != -1 else ''}"
+            r["days_late"] = -days
+            buckets["late"].append(r)
+        elif days <= config.SHEET_RISK_DAYS:
+            r["when"] = ("ships today" if days == 0
+                         else f"ships in {days} day{'s' if days != 1 else ''}")
+            buckets["soon"].append(r)
+        else:
+            r["when"] = f"ships {ready.strftime('%d %b')}"
+            buckets["running"].append(r)
 
-    def _order(r):
-        # overdue first (most overdue on top), then at-risk, then running
-        # by ship date, complete last
-        bucket = 0 if r["overdue"] else (1 if r["at_risk"] else
-                                         (2 if r["pending_qty"] > 0 else 3))
-        return (bucket, r.get("ship_ready") or "9999-12-31")
-
-    rows.sort(key=_order)
+    buckets["late"].sort(key=lambda r: -r.get("days_late", 0))
+    buckets["soon"].sort(key=lambda r: r.get("ship_ready") or "")
+    buckets["running"].sort(key=lambda r: r.get("ship_ready") or "9999")
     return templates.TemplateResponse(
         request, "production.html",
-        {"token": token, "dept": dept, "rows": rows,
+        {"token": token, "dept": dept, "b": buckets,
          "configured": sheets.configured(),
          "last_sync": db.production_last_sync(),
-         "n_overdue": overdue, "n_risk": at_risk,
-         "n_running": running, "n_complete": complete},
+         "total": sum(len(v) for v in buckets.values())},
     )
 
 

@@ -1704,32 +1704,7 @@ function exportDayPDF(kind){
 function printDayFallback(title,dISO,items,by,cone,blunt){
   const rows=items.map(it=>`<tr><td>${it.id}</td><td>${(by[it.id]||{}).po||''}</td><td>${(by[it.id]||{}).desc||''}</td><td class="r">${Math.round(it.made).toLocaleString('en-US')}</td></tr>`).join('');
   const w=window.open('','_blank'); if(!w){document.getElementById('pdfNote').textContent='Allow pop-ups to export, or the PDF library was blocked.';return;}
-  w.document.write(`<html><head><title>${title} — ${dISO}</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#111}h2{margin:0 0 2px}p{color:#555;margin:0 0 10px;font-size:13px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px 9px;font-size:12px;text-align:left}th{background:#1e2837;color:#fff}td.r,th.r{text-align:right}@media print{.np{display:none}}</style></head><body><h2>SOL France — ${title}</h2><p>${niceDate(dISO)} · Cones ${Math.round(cone).toLocaleString('en-US')} · Blunts ${Math.round(blunt).toLocaleString('en-US')} · ${items.length} lines</p><table><thead><tr><th>Unique ID</th><th>PO number</th><th>Description</th><th class="r">Qty</th></tr></thead><tbody>${rows}</tbody></table><p class="np" style="margin-top:14px;color:#888">Choose “Save as PDF” in the print dialog.</p><script>window.onload=function(){setTimeout(function(){window.print();},250);}<\/script>
-<script>
-/* Deep-link from the Task Agent: /dashboard?po=PO26096 pre-filters the
-   orders table to that PO and scrolls to it. */
-(function(){
-  const po = new URLSearchParams(location.search).get('po');
-  if(!po) return;
-  let tries = 0;
-  const timer = setInterval(function(){
-    tries++;
-    try{
-      const sel = document.getElementById('filterPO');
-      if(sel && sel.options.length > 1){
-        obFilterPO = po;
-        renderOrders();
-        const tbl = document.getElementById('orderTbl');
-        if(tbl) tbl.scrollIntoView({behavior:'smooth', block:'start'});
-        clearInterval(timer);
-        return;
-      }
-    }catch(e){}
-    if(tries > 60) clearInterval(timer);   // give up after ~30s (not connected)
-  }, 500);
-})();
-</script>
-</body></html>`);
+  w.document.write(`<html><head><title>${title} — ${dISO}</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#111}h2{margin:0 0 2px}p{color:#555;margin:0 0 10px;font-size:13px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px 9px;font-size:12px;text-align:left}th{background:#1e2837;color:#fff}td.r,th.r{text-align:right}@media print{.np{display:none}}</style></head><body><h2>SOL France — ${title}</h2><p>${niceDate(dISO)} · Cones ${Math.round(cone).toLocaleString('en-US')} · Blunts ${Math.round(blunt).toLocaleString('en-US')} · ${items.length} lines</p><table><thead><tr><th>Unique ID</th><th>PO number</th><th>Description</th><th class=”r”>Qty</th></tr></thead><tbody>${rows}</tbody></table><p class=”np” style=”margin-top:14px;color:#888”>Choose “Save as PDF” in the print dialog.</p><script>window.onload=function(){setTimeout(function(){window.print();},250);}<\/script></body></html>`);
   w.document.close();
 }
 function exportSummary(filtered){
@@ -2332,5 +2307,30 @@ state.start=todayLocal(); DATA.generated=todayLocal(); document.getElementById('
 if(connectedCfg()){ render(); refresh(); } else { setSyncStatus('sample'); render(); }
 scheduleAutoRefresh();
 </script>
+
+<!-- Deep-link from Production page: /dashboard?po=PO26096 pre-filters the orders table and scrolls to it -->
+<script>
+(function(){
+  const po = new URLSearchParams(location.search).get('po');
+  if(!po) return;
+  let tries = 0;
+  const timer = setInterval(function(){
+    tries++;
+    try{
+      const sel = document.getElementById('filterPO');
+      if(sel && sel.options.length > 1){
+        obFilterPO = po;
+        renderOrders();
+        const tbl = document.getElementById('orderTbl');
+        if(tbl) tbl.scrollIntoView({behavior:'smooth', block:'start'});
+        clearInterval(timer);
+        return;
+      }
+    }catch(e){}
+    if(tries > 60) clearInterval(timer);   // give up after ~30s (not connected)
+  }, 500);
+})();
+</script>
+
 </body>
 </html>

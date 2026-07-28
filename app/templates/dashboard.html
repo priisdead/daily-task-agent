@@ -201,6 +201,8 @@
   <h1>Today{% if dept == 'qc' %} — QC{% elif dept != 'admin' %} — {{ dept|capitalize }}{% endif %}</h1>
   <div class="date">{{ date_str }}{% if dept == 'management' %} &middot; all departments, oversight view{% elif dept != 'admin' %} &middot; your department's tasks{% endif %}</div>
 
+  {% if po %}<div style="background:var(--accent);color:#fff;padding:10px 16px;border-radius:8px;font-weight:600;margin-top:20px;display:inline-block">PO {{ po }}</div>{% endif %}
+
   <div class="stats">
     <div class="stat"><div class="n">{{ open_count }}</div><div class="l">Open</div></div>
     <div class="stat amber"><div class="n">{{ progress_count }}</div><div class="l">In progress</div></div>
@@ -217,9 +219,10 @@
     <input class="finput" type="text" name="q" value="{{ q }}"
            placeholder="Filter by client, email, or keyword&hellip;">
     <button class="btn" type="submit">Filter</button>
-    {% if q %}<a class="btn" href="/?token={{ token }}">Clear</a>{% endif %}
+    {% if q or po %}<a class="btn" href="/?token={{ token }}">Clear</a>{% endif %}
   </form>
   {% if q %}<div class="scanline">Showing only tasks matching &ldquo;{{ q }}&rdquo;</div>{% endif %}
+  {% if po %}<div class="scanline">Filtered to PO {{ po }} — <a href="/?token={{ token }}" style="color:var(--accent);text-decoration:underline">show all</a></div>{% endif %}
 
   {% if dept == 'admin' %}
   <div class="admin-tools">
