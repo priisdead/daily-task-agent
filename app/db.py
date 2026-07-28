@@ -84,6 +84,22 @@ CREATE TABLE IF NOT EXISTS events (
     created_at  TEXT
 );
 
+CREATE TABLE IF NOT EXISTS production_rows (
+    id           {_ID},
+    uid          TEXT,
+    po_number    TEXT,
+    customer     TEXT,
+    description  TEXT,
+    po_qty       INTEGER DEFAULT 0,
+    done_qty     INTEGER DEFAULT 0,
+    pending_qty  INTEGER DEFAULT 0,
+    ship_ready   TEXT,
+    priority     TEXT,
+    prod_start   TEXT,
+    sheet_status TEXT,
+    synced_at    TEXT
+);
+
 CREATE TABLE IF NOT EXISTS purchase_orders (
     id          {_ID},
     po_number   TEXT UNIQUE,
@@ -238,6 +254,39 @@ def mark_processed(table: str, ids: list) -> None:
     with get_db() as db:
         placeholders = ",".join("?" * len(ids))
         db.execute(_q(f"UPDATE {table} SET processed = 1 WHERE id IN ({placeholders})"), ids)
+
+
+# ── production sheet rows ────────────────────────────────────────────────────
+
+def replace_production_rows(records: list) -> None:
+    """The sheet is the source of truth — replace our copy wholesale."""
+    now = utcnow()
+    with get_db() as db:
+        db.execute("DELETE FROM production_rows")
+        for r in records:
+            db.execute(
+                _q("INSERT INTO production_rows (uid, po_number, customer,"
+                   " description, po_qty, done_qty, pending_qty, ship_ready,"
+                   " priority, prod_start, sheet_status, synced_at)"
+                   " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"),
+                (r["uid"], r["po_number"], r["customer"], r["description"],
+                 r["po_qty"], r["done_qty"], r["pending_qty"], r["ship_ready"],
+                 r["priority"], r["prod_start"], r["sheet_status"], now),
+            )
+
+
+def production_for_po(po_number: str) -> list:
+    with get_db() as db:
+        return _rows(db.execute(
+            _q("SELECT * FROM production_rows WHERE po_number = ?"
+               " ORDER BY uid"), (po_number.strip().upper(),)))
+
+
+def production_last_sync() -> str:
+    with get_db() as db:
+        rows = _rows(db.execute(
+            "SELECT synced_at FROM production_rows LIMIT 1"))
+        return rows[0]["synced_at"] if rows else ""
 
 
 # ── purchase orders ──────────────────────────────────────────────────────────

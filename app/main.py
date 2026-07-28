@@ -14,7 +14,7 @@ from fastapi.responses import (HTMLResponse, PlainTextResponse,
                                RedirectResponse, Response)
 from fastapi.templating import Jinja2Templates
 
-from . import auth, config, db, digest, extractor, notify, whatsapp
+from . import auth, config, db, digest, extractor, notify, sheets, whatsapp
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("main")
@@ -48,10 +48,20 @@ async def lifespan(app: FastAPI):
         id="morning_update",
         replace_existing=True,
     )
+    if sheets.configured():
+        scheduler.add_job(
+            sheets.sync_production,
+            IntervalTrigger(minutes=config.SHEET_SYNC_MINUTES),
+            id="sheet_sync",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
     scheduler.start()
     log.info(
-        "Scheduler started: scanning every %d minutes, digest daily at %02d:00 (%s)",
+        "Scheduler started: scanning every %d minutes, digest daily at %02d:00 (%s)%s",
         config.SCAN_INTERVAL_MINUTES, config.DIGEST_HOUR, config.TIMEZONE,
+        ", production sheet sync ON" if sheets.configured() else "",
     )
     yield
     scheduler.shutdown(wait=False)
@@ -400,6 +410,7 @@ async def order_detail(request: Request, po_number: str, token: str = Query(""))
         {"token": token, "dept": dept, "po": po,
          "statuses": config.PO_STATUSES,
          "tasks": db.tasks_for_po(po_number),
+         "production": db.production_for_po(po_number),
          "mails": db.emails_mentioning(po["po_number"], limit=50)},
     )
 
@@ -418,6 +429,18 @@ async def order_update(request: Request, po_number: str, token: str = Query(""))
         notes=str(notes)[:1000] if notes is not None else None,
     )
     return RedirectResponse(url=f"/orders/{po_number}?token={token}", status_code=303)
+
+
+@app.get("/sync-sheets", response_class=PlainTextResponse)
+async def sync_sheets_now(request: Request, token: str = Query("")):
+    """Pull the production sheet right now (admin only) and show the result."""
+    _check_token(request, token)
+    if not sheets.configured():
+        return ("Production sheet sync is not configured yet.\n"
+                "Set SHEETS_API_KEY and PROD_SHEET_ID in Render -> Environment "
+                "(the same values from the dashboard's connect panel).")
+    result = await asyncio.to_thread(sheets.sync_production)
+    return f"Sync result: {result}"
 
 
 @app.get("/report.pdf")

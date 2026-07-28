@@ -75,6 +75,24 @@
     {% if dept != 'management' %}<button class="btn primary" type="submit">Save</button>{% endif %}
   </form>
 
+  {% if production %}
+  <h2>Production (from factory sheet) &middot; {{ production|length }} line{{ '' if production|length == 1 else 's' }}</h2>
+  {% for p in production %}
+  <div class="row">
+    <div class="grow">
+      <div class="req">{{ p.description or p.uid }}</div>
+      <div class="meta">
+        {{ '{:,}'.format(p.done_qty) }} / {{ '{:,}'.format(p.po_qty) }} produced
+        {% if p.pending_qty %} &middot; <span style="color:var(--red);font-weight:600">{{ '{:,}'.format(p.pending_qty) }} pending</span>{% endif %}
+        {% if p.ship_ready %} &middot; ship-ready {{ p.ship_ready }}{% endif %}
+        {% if p.sheet_status %} &middot; {{ p.sheet_status }}{% endif %}
+      </div>
+    </div>
+    <span class="pill {{ 'done' if not p.pending_qty else 'in_progress' }}">{{ 'complete' if not p.pending_qty else 'in production' }}</span>
+  </div>
+  {% endfor %}
+  {% endif %}
+
   <h2>Tasks on this order &middot; {{ tasks|length }}</h2>
   {% for t in tasks %}
   <div class="row">

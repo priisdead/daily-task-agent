@@ -101,6 +101,15 @@ DEPARTMENTS = ["admin", "logistics", "production", "accounts", "design",
 PO_STATUSES = ["received", "in_production", "ready", "shipped",
                "delivered", "paid", "cancelled"]
 
+# ── Production sheet sync (feeds the Orders pages from the same Google
+# Sheet as the CXO Production dashboard). Paste the SAME spreadsheet link/ID
+# and AIza API key you use in the dashboard's connect panel. Empty = off.
+SHEETS_API_KEY = os.getenv("SHEETS_API_KEY", "")
+PROD_SHEET_ID = os.getenv("PROD_SHEET_ID", "")
+PROD_SHEET_TAB = os.getenv("PROD_SHEET_TAB", "Sheet1")
+SHEET_SYNC_MINUTES = int(os.getenv("SHEET_SYNC_MINUTES", "60"))
+SHEET_RISK_DAYS = int(os.getenv("SHEET_RISK_DAYS", "2"))
+
 # ── Email login (RBAC) ───────────────────────────────────────────────────────
 # Signs session cookies; set to a long random string in production.
 SECRET_KEY = os.getenv("SECRET_KEY", "")
