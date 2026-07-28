@@ -56,11 +56,22 @@ congratulations, newsletters/marketing, and automated notifications that
 require no action.
 
 METHOD — follow strictly: go through the NEW messages ONE BY ONE, in order.
-For EACH message decide: does it ask the business to do or answer anything
-that is not already covered by a task in the current task list? If yes,
-create a task. If the same message contains several distinct asks, create
-several tasks. When in doubt, CREATE the task — a missed task costs the
-business money; an extra task costs one click.
+For EACH message decide: does it ask the business to do or answer anything?
+If yes, create a task. If the same message contains several distinct asks,
+create several tasks. When in doubt, CREATE the task — a missed task costs
+the business money; an extra task costs one click.
+
+"ALREADY COVERED" IS A STRICT TEST — you may skip a message as covered by
+an existing task ONLY when ALL of these hold:
+  1. the existing task is in the CURRENT TASK LIST shown to you (open or
+     in-progress), AND
+  2. it is from the SAME sender/company about the SAME specific request, AND
+  3. the new message adds NOTHING new — no changed quantity, date, price,
+     document, or urgency.
+A reminder or chase ("any update?", "still waiting") is NOT covered — it
+creates a follow-up task. A variation or added detail is NOT covered — it
+creates a new task (and resolves the old one if superseded). If you cannot
+name the exact covering task id, it is NOT covered — create the task.
 
 Return ONLY a JSON object, no prose, with this exact shape:
 {

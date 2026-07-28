@@ -144,6 +144,23 @@ because a small task inside it finished.
 - New sample requests / price questions --> normal, unless client states
   urgency.
 
+## WHEN IS A MESSAGE "ALREADY COVERED"? (STRICT)
+
+Skipping a message because "a task already covers it" is allowed ONLY when
+the open task list contains a task from the same sender/company for the
+same specific request, and the new message adds nothing new at all. If in
+any doubt — different wording, extra detail, new date/quantity/price, a
+reminder, a chase, a different person asking — CREATE the task. It is far
+cheaper for admin to merge two duplicate tasks than to lose one real ask.
+
+Examples:
+- Client emails "any update on our samples?" while a samples task is open
+  -> NOT covered: create a follow-up/chase task (implementation).
+- Forwarder resends the identical checklist mail twice in one hour, task
+  already open for it -> covered, may skip citing that task id.
+- Client repeats a quote request but changes quantity 500k -> 750k
+  -> NOT covered: new task, resolve the old one.
+
 ## GENERAL
 
 - PO numbers look like PO26xxx; Cannara POs look like QCPOxxxxxx. ALWAYS
