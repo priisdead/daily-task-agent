@@ -49,6 +49,17 @@
   .pill.done { color:var(--accent); border-color:var(--accent); }
   .when { flex:none; width:110px; color:var(--ink-3); font-size:12px; padding-top:2px; }
   .none { padding:14px 0; color:var(--ink-3); }
+
+  @media (max-width: 640px) {
+    .wrap { padding: 0 14px 60px; }
+    h1 { font-size: 26px; margin-top: 24px; }
+    .controls { flex-direction: column; align-items: stretch; }
+    .controls select, .controls input { font-size: 16px; }
+    .btn { min-height: 40px; }
+    .row { flex-wrap: wrap; }
+    .when { width: 100%; padding-top: 0; }
+  }
+
 </style>
 </head>
 <body>

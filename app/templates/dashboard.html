@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#14634E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Today — Task Agent</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap');
@@ -135,6 +138,30 @@
   .done-h { margin-top: 48px; }
   .done .req { color: var(--done); text-decoration: line-through; font-weight: 400; }
   .task.done { border-left-color: var(--done); background: none; }
+
+  /* ── phone layout ── */
+  @media (max-width: 640px) {
+    .wrap { padding: 0 14px 60px; }
+    h1 { font-size: 26px; margin-top: 24px; }
+    .topbar { padding-top: 16px; }
+    .actions { width: 100%; overflow-x: auto; flex-wrap: nowrap;
+      -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+    .btn { padding: 10px 14px; font-size: 12.5px; white-space: nowrap; }
+    .stats { gap: 22px; padding: 14px 0; margin: 20px 0 6px; }
+    .stat .n { font-size: 22px; }
+    .finput, .newtask input, .newtask select, .doneform input,
+    .report-box input[type=date] { font-size: 16px; }  /* stops iOS zoom */
+    .task { flex-wrap: wrap; gap: 8px 10px; }
+    .task .grow { flex: 1 1 100%; }
+    .task form, .task .due, .task .assign { align-self: center; }
+    .doneform { width: 100%; }
+    .doneform input { flex: 1; width: auto; }
+    .assign select, .btn { min-height: 40px; }         /* touch targets */
+    .admin-tools { flex-direction: column; }
+    .report-box { flex-wrap: wrap; }
+    details.folder > summary { padding: 14px 2px; }
+    .fname { font-size: 14.5px; }
+  }
 </style>
 </head>
 <body>

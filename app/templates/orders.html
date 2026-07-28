@@ -46,6 +46,17 @@
   .open-badge { font-size:11.5px; font-weight:600; color:#fff; background:var(--red);
     border-radius:100px; padding:4px 10px; white-space:nowrap; }
   .none { padding:24px 0; color:var(--ink-3); }
+
+  @media (max-width: 640px) {
+    .wrap { padding: 0 14px 60px; }
+    h1 { font-size: 26px; margin-top: 24px; }
+    .actions { width: 100%; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+    .btn { padding: 10px 14px; font-size: 12.5px; white-space: nowrap; min-height: 40px; }
+    .po { flex-wrap: wrap; gap: 8px 12px; }
+    .po .grow { flex: 1 1 100%; order: 2; }
+    .ponum { min-width: 0; }
+  }
+
 </style>
 </head>
 <body>
