@@ -150,7 +150,7 @@ def _matches(t: dict, q: str) -> bool:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, token: str = Query(""), q: str = Query(""), po: str = Query("")):
+async def dashboard(request: Request, token: str = Query(""), q: str = Query(""), po: str = Query(""), merged: str = Query("")):
     try:
         dept = _dept_for(request, token)
     except HTTPException:
@@ -202,6 +202,7 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
             "user_email": (user or {}).get("email", ""),
             "q": q.strip(),
             "po": po_filter,
+            "merged": merged,
             "date_str": today.strftime("%A, %d %B %Y"),
             "by_client": by_client,
             "open_count": sum(1 for t in tasks if t["status"] == "open"),
@@ -682,6 +683,16 @@ async def production_page(request: Request, token: str = Query("")):
          "last_sync": db.production_last_sync(),
          "total": sum(len(v) for v in buckets.values())},
     )
+
+
+@app.post("/dedupe")
+async def dedupe_tasks(request: Request, token: str = Query("")):
+    """Merge exact duplicate open tasks (admin only). Copies are closed
+    with a remark pointing at the kept task — reversible via Reopen."""
+    if _dept_for(request, token) != "admin":
+        raise HTTPException(status_code=403, detail="admin only")
+    merged = await asyncio.to_thread(db.dedupe_open_tasks)
+    return RedirectResponse(url=f"/?token={token}&merged={merged}", status_code=303)
 
 
 @app.get("/sync-sheets")

@@ -555,6 +555,48 @@ def open_tasks() -> list:
             " ORDER BY client, id"))
 
 
+def dedupe_open_tasks() -> int:
+    """Merge EXACT duplicate open tasks (same client + same request text +
+    same PO after normalisation). Keeps one — preferring the copy a human
+    already moved to in_progress, else the oldest — and closes the rest
+    with a remark pointing at the kept task, so nothing is deleted and any
+    merge can be reopened. Similar-but-not-identical tasks are left alone:
+    judging those is human work. Returns how many copies were closed."""
+    import re as _re
+
+    def _norm(s: str) -> str:
+        return _re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+
+    groups: dict[tuple, list] = {}
+    for t in open_tasks():
+        key = (_norm(t.get("client", "")), _norm(t.get("request", "")),
+               (t.get("po_number") or "").strip().upper())
+        if key[1]:  # never group tasks with empty request text
+            groups.setdefault(key, []).append(t)
+
+    closed = 0
+    now = utcnow()
+    with get_db() as db:
+        for dupes in groups.values():
+            if len(dupes) < 2:
+                continue
+            # keep: in_progress beats open (work already started), then oldest id
+            dupes.sort(key=lambda t: (0 if t["status"] == "in_progress" else 1,
+                                      t["id"]))
+            keep = dupes[0]
+            for extra in dupes[1:]:
+                db.execute(
+                    _q("UPDATE tasks SET status = 'done', remark = ?,"
+                       " done_by = ?, updated_at = ? WHERE id = ?"),
+                    (f"auto-merged: duplicate of task #{keep['id']}",
+                     "agent (dedup)", now, extra["id"]),
+                )
+                closed += 1
+    if closed:
+        log_event("info", "dedup", f"auto-merged {closed} duplicate task(s)")
+    return closed
+
+
 def tasks_done_today(today_prefix: str) -> list:
     with get_db() as db:
         return _rows(db.execute(

@@ -336,6 +336,12 @@ def run_digest() -> None:
             db.log_event("error", "gmail", f"mail fetch failed: {exc}")
 
         wa, em, new = _process_batches()
+        try:
+            merged = db.dedupe_open_tasks()
+            if merged:
+                log.info("dedup: auto-merged %d duplicate task(s)", merged)
+        except Exception:
+            log.exception("dedup failed (non-fatal)")
         db.record_run(started, wa, em, new)
         log.info("digest: %d WA msgs, %d emails -> %d new tasks", wa, em, new)
         _alert_if_backlog()
