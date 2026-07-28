@@ -48,6 +48,13 @@ async def lifespan(app: FastAPI):
         id="morning_update",
         replace_existing=True,
     )
+    from . import backup as backup_mod
+    scheduler.add_job(
+        backup_mod.run_weekly_backup,
+        CronTrigger(day_of_week="mon", hour=7, minute=30),
+        id="weekly_backup",
+        replace_existing=True,
+    )
     if sheets.configured():
         scheduler.add_job(
             sheets.sync_production,
@@ -663,6 +670,18 @@ async def sync_sheets_now(request: Request, token: str = Query(""), back: int = 
         return RedirectResponse(url=f"/production?token={token}", status_code=303)
     result = await asyncio.to_thread(sheets.sync_production)
     return PlainTextResponse(f"Sync result: {result}")
+
+
+@app.get("/backup")
+async def backup_download(request: Request, token: str = Query("")):
+    """Download a full database backup zip (admin only)."""
+    _check_token(request, token)
+    from . import backup as backup_mod
+    filename, data = await asyncio.to_thread(backup_mod.build_backup)
+    return Response(
+        content=data, media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.get("/report.pdf")

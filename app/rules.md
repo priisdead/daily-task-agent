@@ -172,6 +172,10 @@ Examples:
 
 ## GENERAL
 
+- Some emails include "[ATTACHMENT: filename]" sections — that is the TEXT
+  READ FROM inside the attached PDF/Excel/CSV. Treat asks, PO numbers,
+  quantities and deadlines found there as fully real: a purchase order that
+  arrives only as a PDF is still a purchase order.
 - PO numbers look like PO26xxx; Cannara POs look like QCPOxxxxxx. ALWAYS
   fill the task's "po_number" field when a PO/order number appears in or is
   clearly implied by the mail — this links the task to the order's record.
