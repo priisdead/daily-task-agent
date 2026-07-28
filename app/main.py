@@ -492,6 +492,21 @@ def _production_access(request: Request, token: str) -> str:
     return dept
 
 
+@app.get("/dashboard", response_class=HTMLResponse)
+async def cxo_dashboard(request: Request, token: str = Query(""), po: str = Query("")):
+    """The CXO Production dashboard, hosted inside the agent behind login.
+    Accepts ?po=... to open pre-filtered to one PO (deep link from the
+    Production page)."""
+    try:
+        _production_access(request, token)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            return RedirectResponse(url="/login", status_code=302)
+        raise
+    path = Path(__file__).parent / "static" / "cxo_production.html"
+    return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
 @app.get("/production", response_class=HTMLResponse)
 async def production_page(request: Request, token: str = Query("")):
     """The factory sheet, inside the agent: every line with progress and

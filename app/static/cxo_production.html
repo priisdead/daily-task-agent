@@ -1,0 +1,2336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>SOL France · Production Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root{
+  --bg:#0e1116; --panel:#161b22; --panel2:#1c232c; --panel3:#222b35;
+  --bd:#2a333f; --bd2:#39465579; --tx:#e7ecf3; --mut:#8b97a7; --faint:#5f6a79;
+  --cone:#39c0ee; --cone-dim:#39c0ee2e; --blunt:#f6a63c; --blunt-dim:#f6a63c2e;
+  --ok:#4ecb8b; --tight:#f2c94c; --late:#f0634f; --kraft:#d9c39c;
+  --shadow:0 1px 0 #ffffff08 inset, 0 8px 24px -12px #000a;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--tx);
+  font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;line-height:1.4;
+  -webkit-font-smoothing:antialiased}
+body{padding:0 0 60px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+h1,h2,h3{margin:0;font-weight:600}
+a{color:inherit}
+.wrap{max-width:1240px;margin:0 auto;padding:0 22px}
+
+/* ===== top bar ===== */
+.top{border-bottom:1px solid var(--bd);background:
+  linear-gradient(180deg,#171d25,#12161c);position:sticky;top:0;z-index:40}
+.top .wrap{display:flex;align-items:center;gap:18px;padding:14px 22px;flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;gap:2px}
+.eyebrow{font-family:"IBM Plex Mono";font-size:11px;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--kraft)}
+.brand h1{font-size:18px;letter-spacing:-.01em}
+.brand .sub{font-size:12px;color:var(--mut)}
+.verdict{margin-left:auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.vchip{display:flex;flex-direction:column;padding:7px 14px;border:1px solid var(--bd);
+  border-radius:9px;background:var(--panel);min-width:118px}
+.vchip .k{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.vchip .v{font-size:16px;font-weight:600}
+.vchip.risk{border-color:#f0634f66;background:#f0634f12}
+.vchip.good{border-color:#4ecb8b55;background:#4ecb8b10}
+
+/* ===== controls ===== */
+.controls{border-bottom:1px solid var(--bd);background:#12161c}
+.controls .wrap{display:flex;gap:10px 20px;flex-wrap:wrap;align-items:flex-end;padding:12px 22px}
+.ctl{display:flex;flex-direction:column;gap:5px}
+.ctl label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.ctl input,.ctl select{background:var(--panel2);border:1px solid var(--bd);color:var(--tx);
+  padding:7px 9px;border-radius:7px;font-family:"IBM Plex Mono";font-size:13px;width:130px}
+.ctl input:focus,.ctl select:focus{outline:2px solid #39c0ee66;outline-offset:0}
+.seg{display:flex;border:1px solid var(--bd);border-radius:7px;overflow:hidden}
+.seg button{background:var(--panel2);border:0;color:var(--mut);padding:7px 12px;
+  font-family:inherit;font-size:12px;cursor:pointer}
+.seg button.on{background:var(--cone-dim);color:var(--cone)}
+.toggle{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;
+  padding-bottom:7px;color:var(--mut);font-size:13px}
+.toggle input{width:auto}
+.reset{margin-left:auto;align-self:center;background:transparent;border:1px solid var(--bd);
+  color:var(--mut);padding:7px 12px;border-radius:7px;font-family:inherit;cursor:pointer;font-size:12px}
+.reset:hover{color:var(--tx);border-color:var(--faint)}
+
+/* ===== tabs ===== */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--bd);margin-top:20px}
+.tabs button{background:transparent;border:0;border-bottom:2px solid transparent;
+  color:var(--mut);padding:11px 16px;font-family:inherit;font-size:14px;font-weight:500;cursor:pointer}
+.tabs button.on{color:var(--tx);border-bottom-color:var(--cone)}
+.tabs .badge{font-family:"IBM Plex Mono";font-size:10px;background:var(--panel3);
+  color:var(--mut);padding:1px 6px;border-radius:20px;margin-left:6px}
+
+/* ===== KPI tiles ===== */
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin:20px 0}
+.kpi{background:var(--panel);border:1px solid var(--bd);border-radius:11px;padding:14px 15px;
+  box-shadow:var(--shadow);position:relative;overflow:hidden}
+.kpi .k{font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+.kpi .v{font-size:25px;font-weight:600;letter-spacing:-.02em}
+.kpi .v small{font-size:13px;color:var(--mut);font-weight:500}
+.kpi .d{font-size:12px;color:var(--mut);margin-top:4px}
+.kpi .rail{position:absolute;left:0;top:0;bottom:0;width:3px}
+.kpi.cone .rail{background:var(--cone)} .kpi.blunt .rail{background:var(--blunt)}
+.kpi.ok .rail{background:var(--ok)} .kpi.risk .rail{background:var(--late)}
+.kpi.date .rail{background:var(--kraft)} .kpi.util .rail{background:#a78bfa}
+
+/* ===== panels ===== */
+.panel{background:var(--panel);border:1px solid var(--bd);border-radius:12px;
+  box-shadow:var(--shadow);margin-bottom:18px}
+.panel > .ph{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--bd)}
+.ph h2{font-size:14px;letter-spacing:.01em}
+.ph .hint{font-size:12px;color:var(--faint);margin-left:auto;font-family:"IBM Plex Mono"}
+.obfilters{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.obsel{background:var(--panel2);border:1px solid var(--bd);color:var(--tx);padding:5px 8px;border-radius:6px;
+  font-family:inherit;font-size:12px;max-width:220px}
+.pbody{padding:16px 18px}
+
+/* gauges */
+.gauges{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.gauge{background:var(--panel2);border:1px solid var(--bd);border-radius:10px;padding:14px 16px}
+.gauge .gt{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.gauge .gt .nm{font-weight:600}
+.gauge .gt .cap{font-family:"IBM Plex Mono";font-size:12px;color:var(--mut)}
+.bar{height:22px;background:#0c0f14;border-radius:6px;overflow:hidden;position:relative;border:1px solid var(--bd)}
+.bar > i{display:block;height:100%;border-radius:5px 0 0 5px}
+.gl{display:flex;justify-content:space-between;margin-top:8px;font-family:"IBM Plex Mono";
+  font-size:11.5px;color:var(--mut)}
+
+/* legend */
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mut);align-items:center}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* gantt */
+.gantt{overflow-x:auto}
+.gantt table{border-collapse:collapse;width:100%;min-width:820px}
+.gantt th{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);
+  font-weight:500;text-align:left;padding:6px 8px;border-bottom:1px solid var(--bd)}
+.gantt td{padding:5px 8px;border-bottom:1px solid #202832;vertical-align:middle}
+.gantt .lbl{white-space:nowrap;max-width:250px;overflow:hidden;text-overflow:ellipsis}
+.gantt .lbl b{font-weight:600}.gantt .lbl small{color:var(--faint);font-family:"IBM Plex Mono"}
+.track{position:relative;height:20px;background:#0c0f14;border-radius:5px;border:1px solid #1d2530}
+.track > .fill{position:absolute;top:2px;bottom:2px;border-radius:4px;min-width:3px}
+.track > .diamond{position:absolute;top:50%;width:11px;height:11px;transform:translate(-50%,-50%) rotate(45deg);
+  border:1.5px solid #0c0f14}
+.pill{font-family:"IBM Plex Mono";font-size:11px;padding:2px 8px;border-radius:20px;white-space:nowrap}
+.pill.ok{background:#4ecb8b1f;color:var(--ok)} .pill.tight{background:#f2c94c1f;color:var(--tight)}
+.pill.late{background:#f0634f1f;color:var(--late)} .pill.done{background:#8b97a71f;color:var(--mut)}
+.pill.excluded{background:#5f6a7926;color:var(--faint);font-style:italic}
+
+/* table */
+.tbl-wrap{overflow-x:auto}
+table.data{border-collapse:collapse;width:100%;table-layout:fixed;font-size:11.5px}
+table.data th{position:sticky;top:0;background:var(--panel2);text-align:left;
+  font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);
+  font-weight:600;padding:7px 6px;border-bottom:1px solid var(--bd);cursor:pointer;
+  white-space:normal;overflow:hidden;line-height:1.25}
+table.data th.sortable:hover{color:var(--tx)}
+table.data th .ar{opacity:.4;font-size:9px}
+table.data td{padding:6px 6px;border-bottom:1px solid #1c232c;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+table.data tr:hover td{background:#1a212a}
+table.data td.desc{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--mut);text-align:left}
+table.data td.left,table.data th.left{text-align:left}
+table.data th.right{text-align:right} table.data th.center{text-align:center}
+@media(max-width:1100px){ table.data{table-layout:auto;min-width:1050px;font-size:11px} }
+.tag{font-family:"IBM Plex Mono";font-size:10px;padding:1px 7px;border-radius:5px;text-transform:uppercase;letter-spacing:.05em}
+.tag.cone{background:var(--cone-dim);color:var(--cone)} .tag.blunt{background:var(--blunt-dim);color:var(--blunt)}
+.pri{font-family:"IBM Plex Mono";font-size:10px;padding:1px 7px;border-radius:5px;text-transform:uppercase;letter-spacing:.04em}
+.pri.high{background:#f0634f24;color:var(--late);font-weight:600} .pri.medium{background:#8b97a71a;color:var(--mut)} .pri.low{background:#5f6a7920;color:var(--faint)}
+.flag.rel{background:#39c0ee14;color:var(--cone);border:1px solid #39c0ee55}
+.run-diff{color:var(--blunt);font-weight:600}
+.right{text-align:right} .center{text-align:center}
+.slack-pos{color:var(--ok)} .slack-neg{color:var(--late);font-weight:600} .slack-zero{color:var(--tight)}
+
+/* calendar */
+.cal-months{display:flex;flex-direction:column;gap:22px}
+.month h3{font-size:14px;margin-bottom:10px;display:flex;align-items:baseline;gap:10px}
+.month h3 .mstat{font-family:"IBM Plex Mono";font-size:11px;color:var(--mut);font-weight:400}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cal .dow{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);
+  text-align:center;padding-bottom:2px}
+.day{background:var(--panel2);border:1px solid var(--bd);border-radius:8px;min-height:112px;padding:6px 7px;
+  display:flex;flex-direction:column;gap:3px;position:relative}
+.day.off{background:#12161c;opacity:.5}
+.day.empty{background:transparent;border:0}
+.day.today{outline:2px solid var(--kraft);outline-offset:-1px}
+.day .dn{font-family:"IBM Plex Mono";font-size:11px;color:var(--mut);display:flex;justify-content:space-between}
+.day .dn .tot{color:var(--faint);font-size:9.5px}
+.day .items{display:flex;flex-direction:column;gap:2px}
+.day .it{display:flex;justify-content:space-between;gap:5px;font-family:"IBM Plex Mono";font-size:9.5px;
+  padding:1px 5px;border-radius:4px;line-height:1.45}
+.day .it.c{background:var(--cone-dim);color:var(--cone)}
+.day .it.b{background:var(--blunt-dim);color:var(--blunt)}
+.day .it .id{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.day .it .q{flex:0 0 auto;font-weight:600}
+.day .it.cont{opacity:.72}
+.day .more{font-size:9px;color:var(--faint);font-family:"IBM Plex Mono";padding-left:5px}
+.day .closed{font-size:9.5px;color:var(--faint);font-family:"IBM Plex Mono";font-style:italic;margin-top:3px}
+.day .due{margin-top:auto;display:flex;flex-direction:column;gap:1px;padding-top:3px;border-top:1px solid #ffffff0d}
+.day .due .dlab{font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.day .flags{display:flex;flex-direction:column;gap:2px}
+.flag{font-family:"IBM Plex Mono";font-size:9px;padding:1px 4px;border-radius:4px;
+  display:flex;justify-content:space-between;gap:4px}
+.flag.ok{background:#4ecb8b1a;color:var(--ok)} .flag.late{background:#f0634f22;color:var(--late)}
+.flag.enq{background:#f6a63c14;color:var(--blunt);border:1px dashed #f6a63c66}
+.flag.enq-ok{background:#4ecb8b12;color:var(--ok);border:1px dashed #4ecb8b66}
+.flag.enq-late{background:#f0634f14;color:var(--late);border:1px dashed #f0634f66}
+
+.foot{color:var(--faint);font-size:11.5px;line-height:1.6;padding:6px 2px 0}
+.foot b{color:var(--mut)}
+.hidden{display:none}
+@media(max-width:900px){.kpis{grid-template-columns:repeat(3,1fr)}.gauges{grid-template-columns:1fr}
+  .verdict{width:100%;margin-left:0}}
+@media(max-width:560px){.kpis{grid-template-columns:repeat(2,1fr)}}
+/* ===== live sync bar ===== */
+.sync{border-bottom:1px solid var(--bd);background:#12161c}
+.sync .wrap{display:flex;align-items:center;gap:14px;padding:9px 22px;flex-wrap:wrap}
+.sync-status{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--mut)}
+.sync-status .dot{width:9px;height:9px;border-radius:50%;background:var(--faint)}
+.sync-status.live .dot{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.sync-status.err .dot{background:var(--late)}
+.sync-status b{color:var(--tx)}
+.sync-btn{background:var(--panel2);border:1px solid var(--bd);color:var(--tx);padding:6px 12px;
+  border-radius:7px;font-family:inherit;font-size:12.5px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.sync-btn:hover{border-color:var(--cone)}
+.sync-btn.ghost{background:transparent;color:var(--mut)}
+.sync-btn.busy{opacity:.6;pointer-events:none}
+.sync-auto{margin-left:auto;font-size:11.5px;color:var(--faint);font-family:"IBM Plex Mono"}
+.sync-panel{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;z-index:100}
+.sync-panel.hidden{display:none}
+.sync-card{background:var(--panel);border:1px solid var(--bd);border-radius:14px;padding:22px 24px;
+  max-width:580px;width:92%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px -20px #000}
+.sync-card .opt{border:1px solid var(--bd);border-radius:10px;padding:14px 15px;margin-top:14px;background:#12161c}
+.sync-card .opth{font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.sync-card .opth .rec{font-family:"IBM Plex Mono";font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ok);background:#4ecb8b1f;padding:2px 7px;border-radius:20px}
+.sync-card h3{font-size:16px;margin-bottom:6px}
+.sync-card p{font-size:12.5px;color:var(--mut);line-height:1.6;margin:0 0 14px}
+.sync-card ol{font-size:12px;color:var(--mut);line-height:1.7;margin:0 0 14px;padding-left:18px}
+.sync-card label{display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:10px 0 4px}
+.sync-card input{width:100%;background:var(--panel2);border:1px solid var(--bd);color:var(--tx);
+  padding:8px 10px;border-radius:7px;font-family:"IBM Plex Mono";font-size:12px}
+.sync-card textarea{width:100%;background:var(--panel2);border:1px solid var(--bd);color:var(--tx);
+  padding:8px 10px;border-radius:7px;font-family:"IBM Plex Mono";font-size:11px;margin-bottom:8px;resize:vertical}
+.sync-card .row{display:flex;gap:8px;margin-top:16px;align-items:center}
+.sync-card .row button{padding:8px 14px;border-radius:8px;font-family:inherit;font-size:13px;cursor:pointer;border:1px solid var(--bd)}
+.sync-card .go{background:var(--cone);color:#06121a;border-color:var(--cone);font-weight:600}
+.sync-card .ghost{background:transparent;color:var(--mut)}
+.sync-card .danger{background:transparent;color:var(--late);border-color:#f0634f55;margin-left:auto}
+.connMsg{font-size:12px;margin-top:12px;min-height:16px}
+.connMsg.ok{color:var(--ok)} .connMsg.err{color:var(--late)}
+/* daily production log */
+.daily{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.daily .d{background:var(--panel2);border:1px solid var(--bd);border-radius:10px;padding:12px 14px}
+.daily .d .k{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
+.daily .d .v{font-size:20px;font-weight:600;letter-spacing:-.02em}
+.daily .d .s{font-size:11.5px;color:var(--mut);margin-top:3px}
+.daily .d.done .v{color:var(--ok)} .daily .d.fwd .v{color:var(--blunt)} .daily .d.tom .v{color:var(--cone)}
+.complist{margin-top:12px;font-size:12px;color:var(--mut);font-family:"IBM Plex Mono"}
+.dlrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--bd)}
+.dlrow .dll{font-size:12px;color:var(--mut);font-weight:600}
+.dlrow .dlnote{font-size:11.5px;color:var(--tight)}
+@media(max-width:760px){.daily{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="wrap">
+  <div class="brand">
+    <div class="eyebrow">SOL France · Production Control</div>
+    <h1>Cargo-Ready Schedule &amp; Capacity Planner</h1>
+    <div class="sub">Finite-capacity plan · confirmed POs by ship-ready date · enquiries by estimated CRD</div>
+  </div>
+  <div class="verdict" id="verdict"></div>
+</div></header>
+
+<section class="controls"><div class="wrap">
+  <div class="ctl"><label>Cone default — pcs/day/SKU</label><input id="capCone" class="num" type="number" step="10000"></div>
+  <div class="ctl"><label>Blunt default — pcs/day/SKU</label><input id="capBlunt" class="num" type="number" step="1000"></div>
+  <div class="ctl"><label>Plan start date</label><input id="startDate" type="date"></div>
+  <div class="ctl"><label>Govt holidays — closed (Sundays always off)</label>
+    <input id="holidays" type="text" style="width:230px" placeholder="2026-08-15, 2026-10-02"></div>
+  <label class="toggle"><input type="checkbox" id="incEnq"> Schedule enquiries as fill</label>
+  <label class="toggle"><input type="checkbox" id="reserveManual"> Reserve manual-start days (no auto-fill)</label>
+  <button class="reset" id="reset">Reset defaults</button>
+</div></section>
+
+<section class="sync"><div class="wrap">
+  <div class="sync-status" id="syncStatus"><span class="dot"></span><span id="syncText">Sample data — connect your Google Sheet to go live</span></div>
+  <button class="sync-btn" id="refreshBtn">↻ Refresh now</button>
+  <button class="sync-btn" id="dlSummary">⤓ Summary (CSV)</button>
+  <button class="sync-btn ghost" id="connectBtn">Connect Google Sheet</button>
+  <span class="sync-auto" id="syncAuto">auto-refresh 9:00 PM daily (while open)</span>
+</div></section>
+
+<div class="sync-panel hidden" id="syncPanel"><div class="sync-card">
+  <h3>Connect your Google Sheet — live</h3>
+  <div class="connMsg" id="connMsg"></div>
+
+  <div class="opt">
+    <div class="opth">Option A · Google Sheets API <span class="rec">recommended</span></div>
+    <p>Most reliable — works even when the file is opened locally. One-time setup:</p>
+    <ol>
+      <li><b>console.cloud.google.com</b> → create/select a project.</li>
+      <li><b>APIs &amp; Services → Library</b> → search <b>Google Sheets API</b> → <b>Enable</b>.</li>
+      <li><b>APIs &amp; Services → Credentials → Create credentials → API key</b> → copy it.</li>
+      <li>In the sheet: <b>Share → Anyone with the link → Viewer</b>.</li>
+    </ol>
+    <label>Spreadsheet link or ID</label>
+    <input id="apiId" placeholder="https://docs.google.com/spreadsheets/d/1AbC…/edit  (or just the ID)">
+    <label>API key</label>
+    <input id="apiKey" placeholder="AIzaSy…">
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>Sheet1 tab name</label><input id="apiS1" value="Sheet1"></div>
+      <div style="flex:1"><label>Enquiries tab name (optional)</label><input id="apiS3" value="Sheet3"></div>
+    </div>
+    <button class="go" id="saveApi" style="margin-top:12px">Connect via API</button>
+  </div>
+
+  <div class="opt">
+    <div class="opth">Option B · Published CSV links</div>
+    <p>File → Share → <b>Publish to web</b> → pick the tab, format <b>.csv</b>, publish, paste the link. Use a <b>different</b> link per tab. Note: this can be blocked when opening the file from disk — host it or use Option A.</p>
+    <label>Sheet1 — confirmed POs (CSV link)</label>
+    <input id="url1" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?gid=0&single=true&output=csv">
+    <label>Sheet3 — enquiries (CSV link, optional)</label>
+    <input id="url3" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?gid=…&single=true&output=csv">
+    <button class="go" id="saveConn" style="margin-top:12px">Connect via CSV</button>
+  </div>
+
+  <div class="opt">
+    <div class="opth">Option C · Paste CSV (offline, manual)</div>
+    <p>In the sheet select all (Ctrl+A) → copy, then paste. Always works; no auto-refresh.</p>
+    <textarea id="pasteS1" rows="3" placeholder="Paste Sheet1 CSV (with header row)…"></textarea>
+    <textarea id="pasteS3" rows="2" placeholder="Paste Sheet3 CSV (optional)…"></textarea>
+    <button class="go" id="loadPaste" style="margin-top:6px">Load pasted data</button>
+  </div>
+
+  <div class="row">
+    <button class="ghost" id="closeConn">Close</button>
+    <button class="danger" id="disconnect">Disconnect</button>
+  </div>
+</div></div>
+
+<main class="wrap">
+  <nav class="tabs" id="tabs">
+    <button data-tab="overview" class="on">Overview</button>
+    <button data-tab="calendar">Production calendar</button>
+    <button data-tab="pack">QC &amp; Packaging</button>
+    <button data-tab="orders">Order book <span class="badge" id="bOrders"></span></button>
+    <button data-tab="enq">Enquiries · CRD <span class="badge" id="bEnq"></span></button>
+  </nav>
+
+  <div class="kpis" id="kpis"></div>
+
+  <!-- OVERVIEW -->
+  <section id="tab-overview">
+    <div class="panel" id="dailyPanel">
+      <div class="ph"><h2>Daily production</h2><span class="hint" id="dailyHint">completed since last sync · carried forward to tomorrow</span></div>
+      <div class="pbody"><div class="daily" id="dailyGrid"></div>
+        <div class="dlrow">
+          <span class="dll">Day-sheet PDF:</span>
+          <input type="date" id="pdfDate" class="obsel">
+          <button class="sync-btn" id="pdfProd">⤓ Production plan</button>
+          <button class="sync-btn" id="pdfPack">⤓ QC &amp; packaging plan</button>
+          <span class="dlnote" id="pdfNote"></span>
+        </div>
+        <div class="complist" id="compList"></div></div>
+    </div>
+    <div class="panel">
+      <div class="ph"><h2>Line utilisation while backlog runs</h2>
+        <span class="hint" id="utilHint"></span></div>
+      <div class="pbody"><div class="gauges" id="gauges"></div></div>
+    </div>
+    <div class="panel">
+      <div class="ph"><h2>Cargo-ready timeline — confirmed orders</h2>
+        <span class="hint">bar = production window · ◆ = ship-ready date</span></div>
+      <div class="pbody">
+        <div class="legend" style="margin-bottom:12px">
+          <span><i class="dot" style="background:var(--ok)"></i>On time</span>
+          <span><i class="dot" style="background:var(--tight)"></i>Tight (&le;3d slack)</span>
+          <span><i class="dot" style="background:var(--late)"></i>Late vs ship-ready</span>
+          <span><i class="dot" style="background:var(--mut)"></i>Already complete</span>
+        </div>
+        <div class="gantt" id="gantt"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CALENDAR -->
+  <section id="tab-calendar" class="hidden">
+    <div class="panel">
+      <div class="ph"><h2>Production calendar</h2>
+        <span class="hint">sequenced by priority then ship-ready · ▲ high ▽ low · ▶ = production start date · ▸ carries to next day</span></div>
+      <div class="pbody">
+        <div class="legend" style="margin-bottom:14px">
+          <span><i class="dot" style="background:var(--cone)"></i>Cone output</span>
+          <span><i class="dot" style="background:var(--blunt)"></i>Blunt output</span>
+          <span><i class="dot" style="background:var(--ok)"></i>Ships on time</span>
+          <span><i class="dot" style="background:var(--late)"></i>Ships late</span>
+          <span><i class="dot" style="background:transparent;border:1px dashed var(--blunt)"></i>Enquiry CRD (est.)</span>
+          <span><i class="dot" style="background:#12161c;border:1px solid var(--bd)"></i>Closed — Sun / holiday</span>
+        </div>
+        <div class="cal-months" id="calMonths"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- QC & PACKAGING -->
+  <section id="tab-pack" class="hidden">
+    <div class="panel">
+      <div class="ph"><h2>QC &amp; Packaging calendar</h2>
+        <span class="hint">each day QC + packs what was <b>produced the previous working day</b> · dispatch-ready end of pack day</span></div>
+      <div class="pbody">
+        <div class="legend" style="margin-bottom:14px">
+          <span><i class="dot" style="background:var(--cone)"></i>Cones QC+packed</span>
+          <span><i class="dot" style="background:var(--blunt)"></i>Blunts QC+packed</span>
+          <span><i class="dot" style="background:var(--kraft)"></i>Dispatch-ready (CRD)</span>
+          <span><i class="dot" style="background:#12161c;border:1px solid var(--bd)"></i>Closed — Sun / holiday</span>
+        </div>
+        <div class="cal-months" id="packMonths"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ORDERS -->
+  <section id="tab-orders" class="hidden">
+    <div class="panel">
+      <div class="ph"><h2>Confirmed order book</h2>
+        <div class="obfilters">
+          <select id="filterPO" class="obsel"></select>
+          <select id="filterStatus" class="obsel">
+            <option value="">All statuses</option>
+            <option value="late">Late</option>
+            <option value="tight">Tight</option>
+            <option value="ok">On time</option>
+            <option value="done">Done</option>
+            <option value="excluded">Excluded (&lt;1000 qty)</option>
+          </select>
+          <button class="sync-btn" id="dlSummaryF" style="padding:5px 10px">⤓ Summary (filtered)</button>
+        </div></div>
+      <div class="pbody" style="padding:0">
+        <div class="tbl-wrap"><table class="data" id="orderTbl"></table></div>
+      </div>
+    </div>
+    <div class="foot" id="ordFoot"></div>
+  </section>
+
+  <!-- ENQUIRIES -->
+  <section id="tab-enq" class="hidden">
+    <div class="panel">
+      <div class="ph"><h2>Enquiries — estimated cargo-ready feasibility</h2>
+        <span class="hint" id="enqHint"></span></div>
+      <div class="pbody" style="padding:0">
+        <div class="tbl-wrap"><table class="data" id="enqTbl"></table></div>
+      </div>
+    </div>
+    <div class="foot">Enquiries are not yet confirmed orders. When <b>Schedule enquiries as fill</b> is on, each
+      quote is loaded onto the line <b>after</b> all confirmed POs, in CRD order, and its earliest achievable
+      ready-date is compared against the estimated CRD in the sheet.</div>
+  </section>
+
+  <div class="foot" style="margin-top:6px" id="assump"></div>
+</main>
+
+<script>
+let DATA = {
+ "confirmed": [
+  {
+   "id": "PO26096.3",
+   "company": "ROBOROOT INC",
+   "po": "PO26096",
+   "desc": "Unb White 120/26 Classic",
+   "po_ok": 1300000,
+   "done": 1036576,
+   "pending": 315424,
+   "ship_ready": "2026-07-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "JC.1",
+   "company": "Joint Craft",
+   "po": "Joint Craft",
+   "desc": "Unb 98/26mm Reefer White OD 8.45mm BD 5mm",
+   "po_ok": 1382400,
+   "done": 0,
+   "pending": 1437696,
+   "ship_ready": "2026-09-15",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "JC.2",
+   "company": "Joint Craft",
+   "po": "Joint Craft",
+   "desc": "Unb 87/15mm Reefer Brown OD 8.45mm BD 5mm",
+   "po_ok": 518400,
+   "done": 0,
+   "pending": 539136,
+   "ship_ready": "2026-09-15",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "JC.3",
+   "company": "Joint Craft",
+   "po": "Joint Craft",
+   "desc": "Unb 84/26mm Classic White OD 10.8mm BD 5.25mm",
+   "po_ok": 410400,
+   "done": 0,
+   "pending": 426816,
+   "ship_ready": "2026-09-15",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "JC.4",
+   "company": "Joint Craft",
+   "po": "Joint Craft",
+   "desc": "Unb 109/26mm Classic White OD 12.5mm BD 5.25mm",
+   "po_ok": 2419200,
+   "done": 0,
+   "pending": 2515968,
+   "ship_ready": "2026-09-15",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "JC.5",
+   "company": "Joint Craft",
+   "po": "Joint Craft",
+   "desc": "Unb 109/26mm Classic Brown OD 12.5mm BD 5.25mm",
+   "po_ok": 672000,
+   "done": 0,
+   "pending": 698880,
+   "ship_ready": "2026-09-15",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/14.1",
+   "company": "Blue Sky",
+   "po": "SF/PF/26-27/14",
+   "desc": "Bluesky 84/26mm Straight Brown",
+   "po_ok": 21600,
+   "done": 0,
+   "pending": 22464,
+   "ship_ready": "2026-07-20",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26106.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26106",
+   "desc": "TS Watermelon Drip 109/26mm Classic -Arctic White",
+   "po_ok": 14400,
+   "done": 0,
+   "pending": 14976,
+   "ship_ready": "2026-07-17",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": "2026-07-22",
+   "tgt_qty": 14976,
+   "max_out": null
+  },
+  {
+   "id": "PO26106.2",
+   "company": "ROBOROOT INC",
+   "po": "PO26106",
+   "desc": "TS Blue Lemonade 109/26mm Classic -Arctic White",
+   "po_ok": 9600,
+   "done": 0,
+   "pending": 9984,
+   "ship_ready": "2026-07-17",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": "2026-07-22",
+   "tgt_qty": 9984,
+   "max_out": null
+  },
+  {
+   "id": "PO26106.3",
+   "company": "ROBOROOT INC",
+   "po": "PO26106",
+   "desc": "TS Cherry Bomber 109/26mm Classic -Arctic White",
+   "po_ok": 9600,
+   "done": 0,
+   "pending": 9984,
+   "ship_ready": "2026-07-17",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": "2026-07-22",
+   "tgt_qty": 9984,
+   "max_out": null
+  },
+  {
+   "id": "PO26106.4",
+   "company": "ROBOROOT INC",
+   "po": "PO26106",
+   "desc": "TS Space Berry Splash 109/26mm Classic -Arctic White",
+   "po_ok": 4800,
+   "done": 0,
+   "pending": 4992,
+   "ship_ready": "2026-07-17",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": "2026-07-22",
+   "tgt_qty": 4992,
+   "max_out": null
+  },
+  {
+   "id": "PO26106.5",
+   "company": "ROBOROOT INC",
+   "po": "PO26106",
+   "desc": "SG Blue Shark 98/26mm Reefer -Arctic White",
+   "po_ok": 34560,
+   "done": 0,
+   "pending": 35943,
+   "ship_ready": "2026-07-17",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": "2026-07-22",
+   "tgt_qty": 35943,
+   "max_out": null
+  },
+  {
+   "id": "PO26106.8",
+   "company": "ROBOROOT INC",
+   "po": "PO26106",
+   "desc": "SG Neon Dragon 98/26mm Reefer -Arctic White",
+   "po_ok": 96768,
+   "done": 72839,
+   "pending": 27800,
+   "ship_ready": "2026-07-17",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": "2026-07-23",
+   "tgt_qty": 27800,
+   "max_out": null
+  },
+  {
+   "id": "PO26106.9",
+   "company": "ROBOROOT INC",
+   "po": "PO26106",
+   "desc": "SG Pink Pineapple 98/26mm Reefer -Arctic White",
+   "po_ok": 48384,
+   "done": 0,
+   "pending": 50320,
+   "ship_ready": "2026-07-17",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": "2026-07-22",
+   "tgt_qty": 50320,
+   "max_out": null
+  },
+  {
+   "id": "PO26106.10",
+   "company": "ROBOROOT INC",
+   "po": "PO26106",
+   "desc": "SG Fiji Zour 98/26mm Reefer -Arctic White",
+   "po_ok": 34560,
+   "done": 0,
+   "pending": 35943,
+   "ship_ready": "2026-07-17",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": "2026-07-22",
+   "tgt_qty": 35943,
+   "max_out": null
+  },
+  {
+   "id": "PO26106.11",
+   "company": "ROBOROOT INC",
+   "po": "PO26106",
+   "desc": "Red M filters (ref# PO25112) 109/26mm Classic -Arctic White",
+   "po_ok": 24000,
+   "done": 0,
+   "pending": 24960,
+   "ship_ready": "2026-07-17",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": "2026-07-22",
+   "tgt_qty": 24960,
+   "max_out": null
+  },
+  {
+   "id": "PO26106.12",
+   "company": "ROBOROOT INC",
+   "po": "PO26106",
+   "desc": "Blank Cones 98/26mm Reefer -Arctic White",
+   "po_ok": 152064,
+   "done": 17054,
+   "pending": 141093,
+   "ship_ready": "2026-07-17",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": "2026-07-22",
+   "tgt_qty": 52000,
+   "max_out": null
+  },
+  {
+   "id": "PO26107.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26107",
+   "desc": "BBOB Smoke109/26mm OneD - Natural Hemp",
+   "po_ok": 480000,
+   "done": 0,
+   "pending": 499200,
+   "ship_ready": "2026-07-31",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26107.2",
+   "company": "ROBOROOT INC",
+   "po": "PO26107",
+   "desc": "BXH Diamond Doobie (purple) 98/26mm Reefer -Arctic White",
+   "po_ok": 103680,
+   "done": 0,
+   "pending": 107828,
+   "ship_ready": "2026-07-31",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26107.3",
+   "company": "ROBOROOT INC",
+   "po": "PO26107",
+   "desc": "BXH Terpedo Neon Riot (pink) 98/26mm Reefer -Arctic White",
+   "po_ok": 200448,
+   "done": 0,
+   "pending": 208466,
+   "ship_ready": "2026-07-31",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26108.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26108",
+   "desc": "Shred TRT yellow 98/26mm Classic -Arctic White",
+   "po_ok": 249600,
+   "done": 0,
+   "pending": 259584,
+   "ship_ready": "2026-07-29",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26108.2",
+   "company": "ROBOROOT INC",
+   "po": "PO26108",
+   "desc": "Shred RootBeer beige 98/26mm Classic -Arctic White",
+   "po_ok": 201600,
+   "done": 0,
+   "pending": 209664,
+   "ship_ready": "2026-07-29",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26109.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26109",
+   "desc": "White M filters with Tremblant filter sticker 84/26mm OneD - Natural Hemp",
+   "po_ok": 27000,
+   "done": 0,
+   "pending": 28080,
+   "ship_ready": "2026-07-27",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": "2026-07-22",
+   "tgt_qty": 28080,
+   "max_out": null
+  },
+  {
+   "id": "PO26111.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26111",
+   "desc": "Blank Cones 98/26mm Reefer -Arctic White",
+   "po_ok": 76032,
+   "done": 0,
+   "pending": 79074,
+   "ship_ready": "2026-07-23",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26112.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26112",
+   "desc": "Blank Cones 98/26mm Classic -Arctic White",
+   "po_ok": 576000,
+   "done": 160272,
+   "pending": 438768,
+   "ship_ready": "2026-07-25",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26113.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26113",
+   "desc": "Blank Cones 98/26mm Classic -Arctic White",
+   "po_ok": 1344000,
+   "done": 0,
+   "pending": 1397760,
+   "ship_ready": "2026-07-28",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26116.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26116",
+   "desc": "Shred TRT yellow 98/26mm Classic -Arctic White",
+   "po_ok": 240000,
+   "done": 0,
+   "pending": 249600,
+   "ship_ready": "2026-07-29",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26118.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26118",
+   "desc": "The Collection 84/26mm OneD - Timber Brown",
+   "po_ok": 32400,
+   "done": 0,
+   "pending": 33696,
+   "ship_ready": "2026-07-28",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26120.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26120",
+   "desc": "Shred Gnarberry pink 98/26mm Classic -Arctic White",
+   "po_ok": 524800,
+   "done": 0,
+   "pending": 545792,
+   "ship_ready": "2026-08-04",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26120.2",
+   "company": "ROBOROOT INC",
+   "po": "PO26120",
+   "desc": "Shred TRT yellow 98/26mm Classic -Arctic White",
+   "po_ok": 144000,
+   "done": 0,
+   "pending": 149760,
+   "ship_ready": "2026-08-04",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26120.3",
+   "company": "ROBOROOT INC",
+   "po": "PO26120",
+   "desc": "Shred RootBeer beige 98/26mm Classic -Arctic White",
+   "po_ok": 124800,
+   "done": 0,
+   "pending": 129792,
+   "ship_ready": "2026-08-04",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26122.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26122",
+   "desc": "White ceramic filters v4.0 with peach glaze (Pantone 1565C) and Peach Cobra 94/25mm Lux -Arctic White",
+   "po_ok": 15360,
+   "done": 0,
+   "pending": 15975,
+   "ship_ready": "2026-08-13",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26122.2",
+   "company": "ROBOROOT INC",
+   "po": "PO26122",
+   "desc": "White ceramic filters v4.0 with yellow glaze (Pantone 129CP) and Mango Blueberry filter stickers 94/25mm Lux -Arctic White",
+   "po_ok": 15360,
+   "done": 0,
+   "pending": 15975,
+   "ship_ready": "2026-08-13",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26124.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26124",
+   "desc": "SG Island Colad 84/26mm Classic -Arctic White",
+   "po_ok": 5400,
+   "done": 0,
+   "pending": 5616,
+   "ship_ready": "2026-07-29",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26124.2",
+   "company": "ROBOROOT INC",
+   "po": "PO26124",
+   "desc": "SG Iced Min 84/26mm Classic -Arctic White",
+   "po_ok": 7200,
+   "done": 0,
+   "pending": 7488,
+   "ship_ready": "2026-07-29",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26124.3",
+   "company": "ROBOROOT INC",
+   "po": "PO26124",
+   "desc": "The Twizz 84/26mm Classic -Arctic White",
+   "po_ok": 5400,
+   "done": 0,
+   "pending": 5616,
+   "ship_ready": "2026-07-29",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "QCPO006726.1",
+   "company": "Cannara Biotech",
+   "po": "QCPO006726",
+   "desc": "Zootz 109/30mm White OD9MM BD 8MM",
+   "po_ok": 327600,
+   "done": 281267,
+   "pending": 59437,
+   "ship_ready": "2026-07-22",
+   "type": "cone",
+   "priority": "high",
+   "prod_start": "2026-07-22",
+   "tgt_qty": 65000,
+   "max_out": null
+  },
+  {
+   "id": "QCPO006726.2",
+   "company": "Cannara Biotech",
+   "po": "QCPO006726",
+   "desc": "Nugz Cherry Temple 98/22MM White",
+   "po_ok": 12000,
+   "done": 0,
+   "pending": 12480,
+   "ship_ready": "2026-07-22",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": "2026-07-22",
+   "tgt_qty": 12480,
+   "max_out": null
+  },
+  {
+   "id": "PO 3152.1",
+   "company": "Mera Cannabis Corp.",
+   "po": "PO 3152",
+   "desc": "109/26 Straight Tube Natural Brown",
+   "po_ok": 10000,
+   "done": 0,
+   "pending": 10400,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26125.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26125",
+   "desc": "Blank Cones 120/26mm Classic - Timber Brown",
+   "po_ok": 52800,
+   "done": 0,
+   "pending": 54912,
+   "ship_ready": "2026-07-23",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26126.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26126",
+   "desc": "Clear purple glass filters with Status Grape Blast stickers 85/30/7mm Tubes - Dark Hemp Wrap",
+   "po_ok": 20000,
+   "done": 0,
+   "pending": 20800,
+   "ship_ready": "2026-08-20",
+   "type": "blunt",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26126.2",
+   "company": "ROBOROOT INC",
+   "po": "PO26126",
+   "desc": "Clear teal glass filters with Status Mellonaire stickers85/30/7mm Tubes - Dark Hemp Wrap",
+   "po_ok": 20000,
+   "done": 0,
+   "pending": 20800,
+   "ship_ready": "2026-08-20",
+   "type": "blunt",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26126.3",
+   "company": "ROBOROOT INC",
+   "po": "PO26126",
+   "desc": "Solid black glass filters with Status Cha Ching Cherry stickers 85/30/7mm Tubes - Dark Hemp Wrap",
+   "po_ok": 10000,
+   "done": 0,
+   "pending": 10400,
+   "ship_ready": "2026-08-20",
+   "type": "blunt",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26126.4",
+   "company": "ROBOROOT INC",
+   "po": "PO26126",
+   "desc": "Clear green glass filters with Status Lamborkiwi stickers 85/30/7mm Tubes - Dark Hemp Wrap",
+   "po_ok": 10000,
+   "done": 0,
+   "pending": 10400,
+   "ship_ready": "2026-08-20",
+   "type": "blunt",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26126.5",
+   "company": "ROBOROOT INC",
+   "po": "PO26126",
+   "desc": "Clear pink glass filters with Status Bubble Bubble stickers 85/30/7mm Tubes - Dark Hemp Wrap",
+   "po_ok": 10000,
+   "done": 0,
+   "pending": 10400,
+   "ship_ready": "2026-08-20",
+   "type": "blunt",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26127.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26127",
+   "desc": "Repped watermark rolling paper Wreck Room M 84/26mm OneD -Arctic White",
+   "po_ok": 253800,
+   "done": 0,
+   "pending": 263952,
+   "ship_ready": "2026-08-12",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/18.1",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/18",
+   "desc": "Dank Diner (Watermelona) 98/26mm Reefer White",
+   "po_ok": 3456,
+   "done": 0,
+   "pending": 3595,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/18.2",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/18",
+   "desc": "Dank Diner Pink Paradise 98/26mm Reefer White",
+   "po_ok": 3456,
+   "done": 0,
+   "pending": 3595,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/18.3",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/18",
+   "desc": "Dank Diner Cherry Float 98/26mm Reefer White",
+   "po_ok": 2304,
+   "done": 0,
+   "pending": 2397,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/18.4",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/18",
+   "desc": "Dank Diner Mango float 98/26mm Reefer White",
+   "po_ok": 2304,
+   "done": 0,
+   "pending": 2397,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/18.5",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/18",
+   "desc": "Dank Diner Tropical Lime Fizz 98/26mm Reefer White",
+   "po_ok": 2304,
+   "done": 0,
+   "pending": 2397,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/18.6",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/18",
+   "desc": "Dank Diner R Cket Blast 98/26mm Reefer White",
+   "po_ok": 2304,
+   "done": 0,
+   "pending": 2397,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/18.7",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/18",
+   "desc": "Dank Diner Berry Whip 98/26mm Reefer White",
+   "po_ok": 2304,
+   "done": 0,
+   "pending": 2397,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/19.1",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/19",
+   "desc": "Dank Diner Watermelona 98/26mm Reefer White",
+   "po_ok": 6912,
+   "done": 0,
+   "pending": 7189,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/19.2",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/19",
+   "desc": "Dank Diner Pink Paradise 98/26mm Reefer White",
+   "po_ok": 6912,
+   "done": 0,
+   "pending": 7189,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/19.3",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/19",
+   "desc": "Dank Diner Cherry Float 98/26mm Reefer White",
+   "po_ok": 6912,
+   "done": 0,
+   "pending": 7189,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/19.4",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/19",
+   "desc": "Dank Diner Orange cream fizz 98/26mm Reefer White",
+   "po_ok": 6912,
+   "done": 0,
+   "pending": 7189,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/19.5",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/19",
+   "desc": "Dank Diner Mango float 98/26mm Reefer White",
+   "po_ok": 6912,
+   "done": 0,
+   "pending": 7189,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/19.6",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/19",
+   "desc": "-Dank Diner Tropical Lime Fizz 98/26mm Reefer White",
+   "po_ok": 6912,
+   "done": 0,
+   "pending": 7189,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/19.7",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/19",
+   "desc": "-Dank Diner R Cket Blast 98/26mm Reefer White",
+   "po_ok": 6912,
+   "done": 0,
+   "pending": 7189,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "SF/PF/26-27/19.8",
+   "company": "Nostrum Biopharm",
+   "po": "SF/PF/26-27/19",
+   "desc": "Dank Diner Berry Whip 98/26mm Reefer White",
+   "po_ok": 6912,
+   "done": 0,
+   "pending": 7189,
+   "ship_ready": "2026-08-10",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "id": "PO26128.1",
+   "company": "ROBOROOT INC",
+   "po": "PO26128",
+   "desc": "Blank Cones 98/26mm Classic -Arctic White",
+   "po_ok": 830400,
+   "done": 0,
+   "pending": 863616,
+   "ship_ready": "2026-08-15",
+   "type": "cone",
+   "priority": "low",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  }
+ ],
+ "enquiries": [
+  {
+   "quote": "QU26159",
+   "company": "ANC",
+   "crd": "2026-08-20",
+   "product": "DHW",
+   "desc": "7mm Status blunts with stickers",
+   "qty": 70000,
+   "type": "blunt",
+   "priority": "medium",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "quote": "QU26160",
+   "company": "ANC",
+   "crd": "2026-07-27",
+   "product": "White and DHW cones",
+   "desc": "QOB (white) and blanks (DHW)",
+   "qty": 95000,
+   "type": "blunt",
+   "priority": "medium",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "quote": "QU26161",
+   "company": "ANC",
+   "crd": "2026-07-28",
+   "product": "White cones",
+   "desc": "Status M filters",
+   "qty": 130000,
+   "type": "cone",
+   "priority": "medium",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "quote": "QU26162",
+   "company": "ANC",
+   "crd": "2026-07-30",
+   "product": "DHW",
+   "desc": "9mm Status blunts with stickers",
+   "qty": 40000,
+   "type": "blunt",
+   "priority": "medium",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "quote": "QU26168",
+   "company": "Accelerant",
+   "crd": "2026-08-01",
+   "product": "Brown cones",
+   "desc": "Botanist M filters",
+   "qty": 96000,
+   "type": "cone",
+   "priority": "medium",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "quote": "QU26175",
+   "company": "Accelerant",
+   "crd": "2026-07-20",
+   "product": "Brown cones",
+   "desc": "Blanks",
+   "qty": 52800,
+   "type": "cone",
+   "priority": "medium",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "quote": "QU26179",
+   "company": "OGI",
+   "crd": "2026-08-12",
+   "product": "Hemp cones",
+   "desc": "White M filters with Tremblant stickers",
+   "qty": 43200,
+   "type": "cone",
+   "priority": "medium",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "quote": "QU26183",
+   "company": "Accelerant",
+   "crd": "2026-08-20",
+   "product": "White and brown cones",
+   "desc": "Blanks",
+   "qty": 1204800,
+   "type": "cone",
+   "priority": "medium",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "quote": "QU26184",
+   "company": "Accelerant",
+   "crd": "2026-09-10",
+   "product": "White and brown cones",
+   "desc": "Blanks",
+   "qty": 4500000,
+   "type": "cone",
+   "priority": "medium",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  },
+  {
+   "quote": "QU26186",
+   "company": "TobaGrown",
+   "crd": "2026-08-11",
+   "product": "White cones",
+   "desc": "TobaGrown M filters",
+   "qty": 76500,
+   "type": "cone",
+   "priority": "medium",
+   "prod_start": null,
+   "tgt_qty": null,
+   "max_out": null
+  }
+ ],
+ "generated": "2026-07-22"
+};
+
+// ---------- defaults ----------
+const DEFAULTS = { capCone:350000, capBlunt:20000, start:"2026-07-22", incEnq:false,
+  holidays:["2026-08-15","2026-10-02"], reserveManual:false };
+const state = {...DEFAULTS, holidays:[...DEFAULTS.holidays]};
+
+// ---------- helpers ----------
+const DAY=86400000;
+const iso = d => d.toISOString().slice(0,10);
+const parse = s => s? new Date(s+"T00:00:00Z") : null;
+const fmt = n => n==null? "—" : Math.round(n).toLocaleString("en-US");
+const kfmt = n => n>=1e6 ? (n/1e6).toFixed(2)+"M" : n>=1e4 ? Math.round(n/1e3)+"k" : n>=1e3 ? (n/1e3).toFixed(1)+"k" : String(Math.round(n));
+const PRANK = {high:0, medium:1, low:2};
+const fmtDate = s => { if(!s) return "—"; const d=parse(s);
+  return d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"2-digit",timeZone:"UTC"}); };
+const daysBetween = (a,b)=> Math.round((parse(b)-parse(a))/DAY);
+const HOLIDAY_NAMES = {"2026-08-15":"Independence Day","2026-10-02":"Gandhi Jayanti"};
+const closedReason = d => d.getUTCDay()===0 ? "Sunday"
+  : (state.holidays||[]).includes(iso(d)) ? (HOLIDAY_NAMES[iso(d)]||"Holiday") : null;
+const isWork = d => !closedReason(d);   // factory closed Sundays + government holidays
+function nextWorkday(isoStr){ if(!isoStr) return null; let d=parse(isoStr); do{ d=new Date(d.getTime()+DAY); }while(closedReason(d)); return iso(d); }
+
+// ---------- core scheduling engine ----------
+// Allocates pending pcs day-by-day against two independent line capacities,
+// earliest ship-ready date first (EDD). Returns completion date per order + daily load.
+function runSchedule(){
+  const cap = {cone: Math.max(1,+state.capCone||0), blunt: Math.max(1,+state.capBlunt||0)};
+  const startISO = state.start;
+
+  // build work items from confirmed pending
+  const far = "2999-12-31";
+  const mk = (o,src)=>{
+    const q = src==="conf" ? (o.tgt_qty && o.tgt_qty>0 ? o.tgt_qty : o.pending) : o.qty;
+    const defMax = o.type==="blunt" ? cap.blunt : cap.cone;
+    return {
+    key:o.id||o.quote, quote:o.quote||null, company:o.company, po:o.po||o.quote, desc:o.desc||o.product||"",
+    po_ok:o.po_ok||0,
+    type:o.type, due:(src==="conf"?o.ship_ready:o.crd)||null, crd:o.crd||null,
+    priority:o.priority||"medium", prod_start:o.prod_start||null,
+    sheetStatus:o.sheet_status||"",
+    excluded: src==="conf" ? (((o.tgt_qty!=null?o.tgt_qty:o.pending)<1000) || (o.pending<1000)) : false,
+    excludeReason: src==="conf" && (((o.tgt_qty!=null?o.tgt_qty:o.pending)<1000)||(o.pending<1000)) ? "< 1000 to produce" : "",
+    pending:o.pending!=null?o.pending:o.qty, tgt_qty:o.tgt_qty||null, max_out:o.max_out||null,
+    dayMax: Math.max(1, (o.max_out && o.max_out>0) ? o.max_out : defMax),
+    qty: q, remaining: q,
+    src, sortDue:(src==="conf"?o.ship_ready:o.crd)||far, complete:null, started:null
+  };};
+  // Status (col M): only blank-status rows enter the plan at all — anything with a status
+  // (Complete, Hold, Dispatched…) is treated as closed and never appears in the order book,
+  // calendar, packaging, KPIs or exports.
+  const conf = DATA.confirmed.filter(o=>String(o.sheet_status||"").trim()==="").map(o=>mk(o,"conf"));
+  const enq  = DATA.enquiries.map(o=>mk(o,"enq"));
+
+  // order: confirmed before enquiries; then priority; then start-dated items (run from their start
+  // date, ahead of un-dated backfill); then earliest date (start date if set, else ship-ready), larger qty first
+  const pool = state.incEnq ? conf.concat(enq) : conf.slice();
+  const effDate = o => o.prod_start || o.sortDue;
+  const order = (a,b)=> a.src!==b.src ? (a.src==="conf"?-1:1)
+      : (PRANK[a.priority]??1)!==(PRANK[b.priority]??1) ? (PRANK[a.priority]??1)-(PRANK[b.priority]??1)
+      : (a.prod_start?0:1)!==(b.prod_start?0:1) ? (a.prod_start?0:1)-(b.prod_start?0:1)
+      : (effDate(a)<effDate(b)?-1:effDate(a)>effDate(b)?1:b.qty-a.qty);
+  const coneQ = pool.filter(o=>!o.excluded && o.type==="cone" && o.remaining>0).sort(order);
+  const bluntQ= pool.filter(o=>!o.excluded && o.type==="blunt"&& o.remaining>0).sort(order);
+
+  const load = {};   // iso -> {cone, blunt, items:[{id,type,made,done,due,remaining,target,dayMax}]}
+  // Rate model: each line-day = 1.0 of line-time. Producing q of a SKU uses q/dayMax of the day.
+  // When every SKU shares one dayMax this reduces exactly to a fixed daily pool of that size.
+  const allocLine=(q,dateISO)=>{
+    let dayLeft=1, i=0, made=0, madeManual=false;
+    while(dayLeft>1e-9 && i<q.length){
+      const o=q[i];
+      if(o.remaining<=0){i++;continue;}
+      if(o.prod_start && o.prod_start>dateISO){i++;continue;}  // not released yet
+      if(state.reserveManual && madeManual && !o.prod_start){break;}  // reserve day for manual items — defer auto-fill
+      if(!o.started) o.started=dateISO;
+      const maxByTime = o.dayMax*dayLeft;            // most of this SKU that fits in remaining day-time
+      const take = Math.min(o.remaining, maxByTime);
+      o.remaining-=take; dayLeft-=take/o.dayMax; made+=take;
+      if(o.prod_start) madeManual=true;
+      const L=(load[dateISO]=load[dateISO]||{cone:0,blunt:0,items:[]});
+      L.items.push({id:o.key, type:o.type, made:take, done:o.remaining<=1e-6,
+                    due:o.due, remaining:o.remaining, target:o.qty, priority:o.priority, dayMax:o.dayMax, prod_start:o.prod_start});
+      if(o.remaining<=1e-6){o.remaining=0;o.complete=dateISO;i++;}
+      else break; // day-time exhausted mid-item — leftover carries to next working day
+    }
+    return made;
+  };
+
+  let cur=parse(startISO), guard=0, lastISO=startISO;
+  const anyLeft=()=> coneQ.some(o=>o.remaining>0)||bluntQ.some(o=>o.remaining>0);
+  while(anyLeft() && guard++<2000){
+    const dISO=iso(cur);
+    if(isWork(cur)){
+      const c=allocLine(coneQ,dISO);
+      const b=allocLine(bluntQ,dISO);
+      if(load[dISO]){ load[dISO].cone=c; load[dISO].blunt=b; lastISO=dISO; }
+    }
+    cur=new Date(cur.getTime()+DAY);
+  }
+
+  // dispatch = 1 working day after production completes (QC + packaging), CRD is graded against this
+  const stat=o=>{
+    if(o.excluded) return "excluded";
+    if(o.qty<=0) return "done";
+    if(!o.dispatch) return "late";
+    if(!o.due) return "ok";
+    const s=daysBetween(o.dispatch,o.due);
+    return s<0?"late": s<=3?"tight":"ok";
+  };
+  [...conf,...enq].forEach(o=>{
+    o.dispatch = o.complete ? nextWorkday(o.complete) : null;
+    o.status=stat(o);
+    o.slack=o.due&&o.dispatch?daysBetween(o.dispatch,o.due):null;
+  });
+  // packaging load: each production day's items are QC'd + packed the next working day
+  const packLoad={};
+  Object.keys(load).forEach(d=>{ const pd=nextWorkday(d); (packLoad[pd]=packLoad[pd]||{cone:0,blunt:0,items:[]});
+    load[d].items.forEach(it=>{ packLoad[pd].items.push(it); if(it.type==='cone')packLoad[pd].cone+=it.made; else packLoad[pd].blunt+=it.made; }); });
+  const packLastISO = Object.keys(packLoad).sort().pop()||lastISO;
+
+  return {conf, enq, load, packLoad, startISO, lastISO, packLastISO, cap, holidays:state.holidays.slice(),
+          closedCount: DATA.confirmed.filter(o=>String(o.sheet_status||"").trim()!=="").length,
+          coneCount:conf.filter(o=>o.type==="cone"&&o.qty>0).length,
+          bluntCount:conf.filter(o=>o.type==="blunt"&&o.qty>0).length};
+}
+
+// ---------- render ----------
+let R=null, sortKey="due", sortDir=1;
+let obFilterPO="", obFilterStatus="";
+// ---- CSV export ----
+function csvCell(v){ v=(v==null?'':String(v)); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+function downloadCSV(name, rows){
+  const csv=rows.map(r=>r.map(csvCell).join(",")).join("\r\n");
+  const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+}
+function exportProductionPlan(){
+  const rows=[["Date","Weekday","Unique ID","PO","Customer","Line","Priority","Qty produced","Line-item complete"]];
+  const by=R.conf.reduce((m,o)=>(m[o.key]=o,m),{});
+  Object.keys(R.load).sort().forEach(d=>{
+    R.load[d].items.forEach(it=>{ const o=by[it.id]||{};
+      rows.push([d, new Date(d+"T00:00:00Z").toLocaleDateString("en-GB",{weekday:"short",timeZone:"UTC"}),
+        it.id, o.po||"", o.company||"", it.type, it.priority||o.priority||"", Math.round(it.made), it.done?"Y":"N"]); });
+  });
+  downloadCSV(`SOL_production_plan_${DATA.generated}.csv`, rows);
+}
+function exportPackagingPlan(){
+  const rows=[["Date","Weekday","Unique ID","PO","Line","Qty QC+packed"]];
+  const by=R.conf.reduce((m,o)=>(m[o.key]=o,m),{});
+  Object.keys(R.packLoad||{}).sort().forEach(d=>{
+    R.packLoad[d].items.forEach(it=>{ const o=by[it.id]||{};
+      rows.push([d, new Date(d+"T00:00:00Z").toLocaleDateString("en-GB",{weekday:"short",timeZone:"UTC"}),
+        it.id, o.po||"", it.type, Math.round(it.made)]); });
+  });
+  downloadCSV(`SOL_qc_packaging_plan_${DATA.generated}.csv`, rows);
+}
+function dayItems(kind,dISO){ const src=kind==='pack'?(R.packLoad||{}):R.load; return src[dISO]?src[dISO].items:[]; }
+function niceDate(dISO){ return new Date(dISO+"T00:00:00Z").toLocaleDateString("en-GB",{weekday:"long",day:"2-digit",month:"long",year:"numeric",timeZone:"UTC"}); }
+function exportDayPDF(kind){
+  const note=document.getElementById('pdfNote');
+  const dISO=document.getElementById('pdfDate').value||todayLocal();
+  const items=dayItems(kind,dISO);
+  const title=kind==='pack'?'QC & Packaging Plan':'Production Plan';
+  if(!items.length){ note.textContent=`No ${kind==='pack'?'QC/packaging':'production'} scheduled on ${fmtDate(dISO)}.`; return; }
+  note.textContent='';
+  const by=R.conf.reduce((m,o)=>(m[o.key]=o,m),{});
+  const cone=items.filter(i=>i.type==='cone').reduce((s,i)=>s+i.made,0), blunt=items.filter(i=>i.type==='blunt').reduce((s,i)=>s+i.made,0);
+  const body=items.map(it=>[it.id,(by[it.id]||{}).po||'',(by[it.id]||{}).desc||'',Math.round(it.made).toLocaleString('en-US')]);
+  const fname=`SOL_${kind==='pack'?'qc_packaging':'production'}_plan_${dISO}.pdf`;
+  if(window.jspdf&&window.jspdf.jsPDF){
+    try{
+      const doc=new window.jspdf.jsPDF({unit:'pt',format:'a4'});
+      doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(20,26,34);
+      doc.text('SOL France — '+title,40,46);
+      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(90);
+      doc.text(niceDate(dISO),40,64);
+      doc.text(`Cones: ${Math.round(cone).toLocaleString('en-US')}    Blunts: ${Math.round(blunt).toLocaleString('en-US')}    Line items: ${items.length}`,40,80);
+      doc.autoTable({ startY:94, head:[['Unique ID','PO number','Description','Qty']], body,
+        styles:{fontSize:9,cellPadding:4,overflow:'linebreak'}, headStyles:{fillColor:[30,40,55],textColor:255},
+        alternateRowStyles:{fillColor:[244,246,249]}, columnStyles:{0:{cellWidth:90},1:{cellWidth:90},3:{halign:'right',cellWidth:70}}, margin:{left:40,right:40} });
+      doc.setFontSize(8); doc.setTextColor(150);
+      doc.text('Generated '+new Date().toLocaleString(),40,doc.internal.pageSize.getHeight()-22);
+      doc.save(fname); return;
+    }catch(e){/* fall through to print */}
+  }
+  printDayFallback(title,dISO,items,by,cone,blunt);
+}
+function printDayFallback(title,dISO,items,by,cone,blunt){
+  const rows=items.map(it=>`<tr><td>${it.id}</td><td>${(by[it.id]||{}).po||''}</td><td>${(by[it.id]||{}).desc||''}</td><td class="r">${Math.round(it.made).toLocaleString('en-US')}</td></tr>`).join('');
+  const w=window.open('','_blank'); if(!w){document.getElementById('pdfNote').textContent='Allow pop-ups to export, or the PDF library was blocked.';return;}
+  w.document.write(`<html><head><title>${title} — ${dISO}</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#111}h2{margin:0 0 2px}p{color:#555;margin:0 0 10px;font-size:13px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px 9px;font-size:12px;text-align:left}th{background:#1e2837;color:#fff}td.r,th.r{text-align:right}@media print{.np{display:none}}</style></head><body><h2>SOL France — ${title}</h2><p>${niceDate(dISO)} · Cones ${Math.round(cone).toLocaleString('en-US')} · Blunts ${Math.round(blunt).toLocaleString('en-US')} · ${items.length} lines</p><table><thead><tr><th>Unique ID</th><th>PO number</th><th>Description</th><th class="r">Qty</th></tr></thead><tbody>${rows}</tbody></table><p class="np" style="margin-top:14px;color:#888">Choose “Save as PDF” in the print dialog.</p><script>window.onload=function(){setTimeout(function(){window.print();},250);}<\/script>
+<script>
+/* Deep-link from the Task Agent: /dashboard?po=PO26096 pre-filters the
+   orders table to that PO and scrolls to it. */
+(function(){
+  const po = new URLSearchParams(location.search).get('po');
+  if(!po) return;
+  let tries = 0;
+  const timer = setInterval(function(){
+    tries++;
+    try{
+      const sel = document.getElementById('filterPO');
+      if(sel && sel.options.length > 1){
+        obFilterPO = po;
+        renderOrders();
+        const tbl = document.getElementById('orderTbl');
+        if(tbl) tbl.scrollIntoView({behavior:'smooth', block:'start'});
+        clearInterval(timer);
+        return;
+      }
+    }catch(e){}
+    if(tries > 60) clearInterval(timer);   // give up after ~30s (not connected)
+  }, 500);
+})();
+</script>
+</body></html>`);
+  w.document.close();
+}
+function exportSummary(filtered){
+  const src = filtered ? orderFiltered() : R.conf;
+  const rows=[["Unique ID","PO","Customer","Description","Line","Priority","PO qty","Pending","Run qty","Max/day","Prod start","Prod done","Dispatch","CRD / Ship-ready","Slack (days)","Status"]];
+  src.forEach(o=>rows.push([o.key,o.po||"",o.company||"",o.desc||"",o.type,o.priority,o.po_ok||0,o.pending,Math.max(0,o.qty),o.dayMax,
+    o.prod_start||"",o.complete||"",o.dispatch||"",o.due||"",o.slack==null?"":o.slack,o.status]));
+  downloadCSV(`SOL_order_summary${filtered&&(obFilterPO||obFilterStatus)?'_filtered':''}_${DATA.generated}.csv`, rows);
+}
+function render(){
+  R=runSchedule();
+  renderVerdict(); renderKPIs(); renderGauges(); renderGantt();
+  renderOrders(); renderEnq(); renderCalendar(); renderPackaging(); renderAssump(); renderDaily();
+  document.getElementById("bOrders").textContent=R.conf.length;
+  document.getElementById("bEnq").textContent=DATA.enquiries.length;
+}
+
+function totals(items,f){return items.reduce((s,o)=>s+f(o),0);}
+
+function renderVerdict(){
+  const conf=R.conf.filter(o=>!o.excluded);
+  const pend=totals(conf,o=>Math.max(0,o.qty));
+  const late=conf.filter(o=>o.status==="late").length;
+  const tight=conf.filter(o=>o.status==="tight").length;
+  const el=document.getElementById("verdict");
+  el.innerHTML=`
+    <div class="vchip"><span class="k">Backlog clears</span><span class="v mono">${fmtDate(R.lastISO)}</span></div>
+    <div class="vchip ${late?'risk':'good'}"><span class="k">Orders at risk</span>
+      <span class="v mono">${late} late${tight?` · ${tight} tight`:''}</span></div>
+    <div class="vchip"><span class="k">Target to make</span>
+      <span class="v mono">${(pend/1e6).toFixed(2)}M</span></div>`;
+}
+
+function renderKPIs(){
+  const conf=R.conf.filter(o=>!o.excluded);
+  const pc=totals(conf.filter(o=>o.type==="cone"),o=>Math.max(0,o.qty));
+  const pb=totals(conf.filter(o=>o.type==="blunt"),o=>Math.max(0,o.qty));
+  const coneDays=totals(conf.filter(o=>o.type==="cone"),o=>Math.max(0,o.qty)/o.dayMax);
+  const bluntDays=totals(conf.filter(o=>o.type==="blunt"),o=>Math.max(0,o.qty)/o.dayMax);
+  const nActive=conf.filter(o=>o.qty>0).length;
+  const onTime=conf.filter(o=>o.qty>0&&(o.status==="ok"||o.status==="tight")).length;
+  const late=conf.filter(o=>o.status==="late").length;
+  const otPct=nActive? Math.round(onTime/nActive*100):100;
+  const util=Math.round(Math.min(100, (coneDays/(Math.max(coneDays,bluntDays)||1))*100));
+  const K=[
+    ["cone","Target · cones",`${fmt(pc)}`,`${coneDays.toFixed(1)} line-days · default ${fmt(R.cap.cone)}/d`],
+    ["blunt","Target · blunts",`${fmt(pb)}`,`${bluntDays.toFixed(1)} line-days · default ${fmt(R.cap.blunt)}/d`],
+    ["date","Projected clear",`${fmtDate(R.lastISO)}`,`from ${fmtDate(R.startISO)} · Mon–Sat, Sun+holidays off`],
+    ["ok","On-time orders",`${otPct}<small>%</small>`,`${onTime} of ${nActive} confirmed lines`],
+    ["risk","Late vs ship date",`${late}`,`${late? 'need re-plan / OT':'all lines clear'}`],
+    ["util","Bottleneck",`${coneDays>=bluntDays?'Cone':'Blunt'}`,`cone ${coneDays.toFixed(1)}d vs blunt ${bluntDays.toFixed(1)}d`],
+  ];
+  document.getElementById("kpis").innerHTML=K.map(([c,k,v,d])=>
+    `<div class="kpi ${c}"><span class="rail"></span><div class="k">${k}</div>
+     <div class="v num">${v}</div><div class="d">${d}</div></div>`).join("");
+}
+
+function renderGauges(){
+  const conf=R.conf.filter(o=>!o.excluded);
+  const pc=totals(conf.filter(o=>o.type==="cone"),o=>Math.max(0,o.qty));
+  const pb=totals(conf.filter(o=>o.type==="blunt"),o=>Math.max(0,o.qty));
+  const coneDays=totals(conf.filter(o=>o.type==="cone"),o=>Math.max(0,o.qty)/o.dayMax);
+  const bluntDays=totals(conf.filter(o=>o.type==="blunt"),o=>Math.max(0,o.qty)/o.dayMax);
+  const maxD=Math.max(coneDays,bluntDays,1);
+  const g=(nm,accent,pend,capDay,days)=>{
+    const pct=Math.min(100,days/maxD*100);
+    return `<div class="gauge">
+      <div class="gt"><span class="nm" style="color:${accent}">${nm}</span>
+        <span class="cap">default ${fmt(capDay)} pcs/day per SKU</span></div>
+      <div class="bar"><i style="width:${pct}%;background:${accent}"></i></div>
+      <div class="gl"><span>${fmt(pend)} pcs target</span><span>${days.toFixed(1)} production days</span></div>
+    </div>`;
+  };
+  document.getElementById("gauges").innerHTML=
+    g("Cone line","var(--cone)",pc,R.cap.cone,coneDays)+
+    g("Blunt line","var(--blunt)",pb,R.cap.blunt,bluntDays);
+  document.getElementById("utilHint").textContent=
+    `cone line is the constraint — clears in ${coneDays.toFixed(1)} days vs ${bluntDays.toFixed(1)} for blunts`;
+}
+
+function renderGantt(){
+  const items=R.conf.filter(o=>o.qty>0&&!o.excluded).slice().sort((a,b)=>(a.sortDue<b.sortDue?-1:1));
+  if(!items.length){document.getElementById("gantt").innerHTML="<p>No pending orders.</p>";return;}
+  const t0=parse(R.startISO).getTime();
+  const ends=items.map(o=>o.dispatch?parse(o.dispatch).getTime():(o.complete?parse(o.complete).getTime():t0));
+  const dues=items.map(o=>o.due?parse(o.due).getTime():t0);
+  const t1=Math.max(...ends,...dues, t0+DAY)+DAY*2;
+  const span=t1-t0;
+  const x=ms=>((ms-t0)/span*100);
+  const col={ok:"var(--ok)",tight:"var(--tight)",late:"var(--late)",done:"var(--mut)"};
+  const rows=items.map(o=>{
+    const s=o.started?parse(o.started).getTime():t0;
+    const e=o.complete?parse(o.complete).getTime():t1;
+    const disp=o.dispatch?parse(o.dispatch).getTime():e;
+    const L=x(s), W=Math.max(1.5,x(e)-x(s)), pkW=Math.max(0,x(disp)-x(e));
+    const dueX=o.due?x(parse(o.due).getTime()):null;
+    const c=col[o.status]||"var(--mut)";
+    const diamond = dueX!=null? `<span class="diamond" style="left:${dueX}%;background:${c}"></span>`:"";
+    const slackTxt = o.slack==null?"" : o.slack<0?`${o.slack}d`:`+${o.slack}d`;
+    return `<tr>
+      <td class="lbl"><b>${o.key}</b> <small>${o.type[0].toUpperCase()}${o.priority!=='medium'?' · '+o.priority.toUpperCase():''}</small><br>
+        <span style="color:var(--mut);font-size:12px">${o.desc.slice(0,42)}</span></td>
+      <td style="width:52%"><div class="track">
+        <div class="fill" style="left:${L}%;width:${W}%;background:${c}"></div>
+        <div class="fill" style="left:${x(e)}%;width:${pkW}%;background:${c};opacity:.32" title="QC + packaging"></div>${diamond}</div></td>
+      <td class="mono" style="font-size:12px">${fmtDate(o.dispatch)}</td>
+      <td class="center"><span class="pill ${o.status}">${o.status.toUpperCase()}${slackTxt?` ${slackTxt}`:''}</span></td>
+    </tr>`;
+  }).join("");
+  document.getElementById("gantt").innerHTML=
+    `<table><thead><tr><th>Order</th>
+       <th>${fmtDate(iso(new Date(t0)))} &nbsp;→&nbsp; ${fmtDate(iso(new Date(t1)))}</th>
+       <th>Dispatch</th><th class="center">Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// ----- order book table -----
+const ORD_COLS=[
+  ["key","PO / line",o=>`<b>${o.key}</b>`,"l","7.5%"],
+  ["company","Customer",o=>`<span title="${(o.company||"").replace(/"/g,"&quot;")}">${o.company||"—"}</span>`,"l","9%"],
+  ["desc","Description",o=>`<span title="${(o.desc||"").replace(/"/g,"&quot;")}">${o.desc}</span>`,"desc","12.5%"],
+  ["type","Line",o=>`<span class="tag ${o.type}">${o.type}</span>`,"c","5.5%"],
+  ["priority","Priority",o=>`<span class="pri ${o.priority}">${o.priority}</span>`,"c","5.5%"],
+  ["po_ok","PO qty",o=>fmt(o.po_ok||0),"r num","6.5%"],
+  ["pending","Pending",o=>fmt(o.pending),"r num","6.5%"],
+  ["qty","Run qty",o=>{const d=o.tgt_qty&&o.tgt_qty!==o.pending;return `<span class="${d?'run-diff':''}">${fmt(Math.max(0,o.qty))}</span>`;},"r num","6.5%"],
+  ["dayMax","Max/day",o=>o.max_out?`<span style="color:var(--cone);font-weight:600">${fmt(o.dayMax)}</span>`:`<span style="color:var(--mut)">${fmt(o.dayMax)}</span><span style="color:var(--faint);font-size:9px"> def</span>`,"r num","7.5%"],
+  ["prod_start","Prod. start",o=>o.prod_start?fmtDate(o.prod_start):'<span style="color:var(--faint)">—</span>',"r mono","6%"],
+  ["due","CRD",o=>fmtDate(o.due),"r mono","6%"],
+  ["complete","Prod. done",o=>fmtDate(o.complete),"r mono","6%"],
+  ["dispatch","Dispatch",o=>o.dispatch?`<span style="color:var(--kraft)">${fmtDate(o.dispatch)}</span>`:'—',"r mono","6%"],
+  ["slack","Slack",o=>{ if(o.slack==null)return '<span style="color:var(--faint)">—</span>';
+    const cl=o.slack<0?"slack-neg":o.slack<=3?"slack-zero":"slack-pos";
+    return `<span class="${cl} num">${o.slack<0?'':'+'}${o.slack}d</span>`;},"r","4%"],
+  ["status","Status",o=>`<span class="pill ${o.status}"${o.excluded?` title="excluded — ${o.excludeReason}"`:''}>${o.status}</span>`,"c","5.5%"],
+];
+function orderFiltered(){
+  return R.conf.filter(o=> (!obFilterPO||o.po===obFilterPO) && (!obFilterStatus||o.status===obFilterStatus));
+}
+function renderOrders(){
+  // populate PO dropdown (preserve selection)
+  const sel=document.getElementById("filterPO");
+  if(sel){ const pos=[...new Set(R.conf.map(o=>o.po).filter(Boolean))].sort();
+    sel.innerHTML=`<option value="">All POs (${R.conf.length} lines)</option>`+pos.map(p=>`<option value="${p}"${p===obFilterPO?' selected':''}>${p}</option>`).join("");
+    document.getElementById("filterStatus").value=obFilterStatus; }
+  const rows=orderFiltered();
+  const val=(o,k)=> k==="qty"?Math.max(0,o.qty): k==="due"?(o.due||"9999"):
+    k==="complete"?(o.complete||"9999"): k==="dispatch"?(o.dispatch||"9999"): k==="slack"?(o.slack==null?9999:o.slack):
+    k==="priority"?(PRANK[o.priority]??1): k==="prod_start"?(o.prod_start||"0000"): (o[k]||"");
+  rows.sort((a,b)=>{const A=val(a,sortKey),B=val(b,sortKey);
+    return (A<B?-1:A>B?1:0)*sortDir;});
+  const cg=`<colgroup>${ORD_COLS.map(c=>`<col style="width:${c[4]||'auto'}">`).join("")}</colgroup>`;
+  const head=ORD_COLS.map(c=>{
+    const t=String(c[3]).split(" ");
+    const hcls=t.includes("r")?"right":t.includes("c")?"center":"left";
+    return `<th class="sortable ${hcls}" data-k="${c[0]}" title="${c[1]}">${c[1]}<span class="ar">${sortKey===c[0]?(sortDir>0?'▲':'▼'):''}</span></th>`;}).join("");
+  const body=rows.map(o=>`<tr>${ORD_COLS.map(c=>{
+    const t=String(c[3]).split(" ");
+    const cls=t.includes("r")?"right":t.includes("c")?"center":t.includes("desc")?"desc":"left";
+    const mono=t.includes("mono")||t.includes("num")?"num":"";
+    return `<td class="${cls} ${mono}">${c[2](o)}</td>`;}).join("")}</tr>`).join("");
+  document.getElementById("orderTbl").innerHTML=
+    `${cg}<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+  document.querySelectorAll("#orderTbl th.sortable").forEach(th=>th.onclick=()=>{
+    const k=th.dataset.k; if(sortKey===k)sortDir*=-1; else{sortKey=k;sortDir=1;} renderOrders();});
+  const late=orderFiltered().filter(o=>o.status==="late");
+  const shown=rows.length, tot=R.conf.length, excl=R.conf.filter(o=>o.excluded).length;
+  document.getElementById("ordFoot").innerHTML= `${shown<tot?`Showing ${shown} of ${tot} lines. `:''}`+ (late.length?
+    `<b>${late.length} project late</b> vs CRD (dispatch after packaging): ${late.slice(0,6).map(o=>o.key).join(", ")}${late.length>6?" …":""}. Raise capacity, re-sequence, or move start dates.`
+    : `All shown lines dispatch on or before their CRD at current capacity.`)
+    + (excl?` <span style="color:var(--faint)">· ${excl} line(s) excluded from the calendar (&lt;1000 to produce).</span>`:'')
+    + (typeof R.closedCount==='number'&&R.closedCount? ` <span style="color:var(--faint)">· ${R.closedCount} line(s) hidden — Status column not blank.</span>`:'');
+}
+
+// ----- enquiries table -----
+function renderEnq(){
+  const cols=[
+    ["quote","Quote",o=>`<b>${o.quote}</b>`],
+    ["company","Customer",o=>o.company||"—"],
+    ["desc","Description",o=>`<span>${o.desc||o.product||''}</span>`,"desc"],
+    ["type","Line",o=>`<span class="tag ${o.type}">${o.type}</span>`,"c"],
+    ["qty","Qty",o=>fmt(o.qty),"r num"],
+    ["crd","Est. CRD",o=>fmtDate(o.crd),"r mono"],
+    ["ready","Dispatch (after pack)",o=> state.incEnq? fmtDate(o.dispatch):'<span style="color:var(--faint)">toggle on</span>',"r mono"],
+    ["verdict","Feasibility vs CRD",o=>{
+      if(!state.incEnq) return '<span class="pill done">not scheduled</span>';
+      if(!o.crd) return '<span class="pill ok">no CRD set</span>';
+      if(!o.dispatch) return '<span class="pill late">beyond horizon</span>';
+      const s=daysBetween(o.dispatch,o.crd);
+      const cl=s<0?"late":s<=3?"tight":"ok";
+      return `<span class="pill ${cl}">${cl.toUpperCase()} ${s<0?'':'+'}${s}d</span>`;},"c"],
+  ];
+  const head=cols.map(c=>`<th>${c[1]}</th>`).join("");
+  const body=R.enq.map(o=>`<tr>${cols.map(c=>{
+    const cls=c[3]==="r"?"right":c[3]==="c"?"center":c[3]==="desc"?"desc":"";
+    const mono=(c[3]||"").includes("mono")||(c[3]||"").includes("num")?"num":"";
+    return `<td class="${cls} ${mono}">${c[2](o)}</td>`;}).join("")}</tr>`).join("");
+  document.getElementById("enqTbl").innerHTML=`<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+  const q=totals(R.enq,o=>o.qty);
+  document.getElementById("enqHint").textContent=
+    `${DATA.enquiries.length} open quotes · ${fmt(q)} pcs${state.incEnq?' · loaded after confirmed POs':' · turn on “Schedule enquiries as fill” to test dates'}`;
+}
+
+// ----- calendar -----
+const MON=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+function renderCalendar(){
+  // deadlines by day — confirmed ship-ready (solid) + enquiry CRD (dashed estimate)
+  const deadlines={};
+  const push=(iso,e)=>{(deadlines[iso]=deadlines[iso]||[]).push(e);};
+  R.conf.filter(o=>o.qty>0&&o.due).forEach(o=>{
+    const good=o.dispatch && daysBetween(o.dispatch,o.due)>=0;
+    push(o.due,{label:o.key, cls:good?'ok':'late', mark:good?'✓':'!'});
+  });
+  R.enq.filter(o=>o.crd).forEach(o=>{
+    let cls='enq', mark='≈';                       // not scheduled → neutral estimate
+    if(state.incEnq){
+      const good=o.complete && daysBetween(o.complete,o.crd)>=0;
+      cls = good?'enq-ok':'enq-late'; mark = o.complete?(good?'✓':'!'):'×';
+    }
+    push(o.crd,{label:o.quote, cls, mark});
+  });
+
+  // production start (release) dates by day — line item cannot run before this
+  const releases={};
+  R.conf.filter(o=>o.qty>0 && o.prod_start).forEach(o=>{
+    (releases[o.prod_start]=releases[o.prod_start]||[]).push(o.key);
+  });
+
+  const start=parse(R.startISO);
+  // horizon covers backlog clear AND the latest enquiry CRD / release shown
+  let endISO=R.lastISO;
+  R.enq.forEach(o=>{ if(o.crd && o.crd>endISO) endISO=o.crd; });
+  R.conf.forEach(o=>{ if(o.prod_start && o.prod_start>endISO) endISO=o.prod_start; });
+  const end=parse(endISO);
+  const months=[];
+  let m=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth(),1));
+  const endM=new Date(Date.UTC(end.getUTCFullYear(),end.getUTCMonth(),1));
+  while(m<=endM){months.push(new Date(m)); m=new Date(Date.UTC(m.getUTCFullYear(),m.getUTCMonth()+1,1));}
+  const todayISO=DATA.generated;
+  const capCone=R.cap.cone;
+
+  const html=months.map(mo=>{
+    const y=mo.getUTCFullYear(), mi=mo.getUTCMonth();
+    const first=new Date(Date.UTC(y,mi,1)).getUTCDay();
+    const dim=new Date(Date.UTC(y,mi+1,0)).getUTCDate();
+    let cells="";
+    for(let i=0;i<first;i++) cells+=`<div class="day empty"></div>`;
+    let moCone=0,moBlunt=0;
+    for(let d=1;d<=dim;d++){
+      const dISO=`${y}-${String(mi+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+      const dt=parse(dISO);
+      const reason=closedReason(dt);
+      const ld=R.load[dISO];
+      if(ld){moCone+=ld.cone;moBlunt+=ld.blunt;}
+      const dueList = deadlines[dISO]||[];
+      const DCAP=20;
+      const flags = dueList.slice(0,DCAP).map(f=>
+        `<div class="flag ${f.cls}"><span>${f.label}</span><span>${f.mark}</span></div>`).join("")
+        + (dueList.length>DCAP? `<div class="more">+${dueList.length-DCAP} more</div>`:'');
+      const dueHtml = dueList.length? `<div class="due"><span class="dlab">ships / crd due</span><div class="flags">${flags}</div></div>`:'';
+      const relList = releases[dISO]||[];
+      const todayCls = dISO===todayISO?' today':'';
+      if(reason){                                   // Sunday or government holiday — factory closed
+        const relHtml = relList.length? `<div class="flags">`+relList.slice(0,20).map(k=>
+          `<div class="flag rel"><span>${k}</span><span>▶ start</span></div>`).join("")+`</div>`:'';
+        cells+=`<div class="day off${todayCls}">
+          <div class="dn"><span>${d}</span></div>
+          <div class="closed">${reason}</div>${relHtml}${dueHtml}</div>`;
+      } else {
+        const items = ld? ld.items : [];
+        const CAP=40;
+        const itemsHtml = items.slice(0,CAP).map(it=>{
+          const glyph = it.done? '✓' : '▸';   // ▸ = leftover carries to next working day
+          const pg = it.priority==='high'?'▲ ':it.priority==='low'?'▽ ':'';
+          const rel = it.prod_start===dISO ? '▶ ' : '';   // starts today → inline start marker
+          return `<div class="it ${it.type==='cone'?'c':'b'}${it.done?'':' cont'}" title="${it.id} · ${it.priority} priority${it.prod_start===dISO?' · production start':''} · max ${fmt(it.dayMax)}/day · ${fmt(it.made)} pcs today${it.done?' (line item complete)':' · '+fmt(it.remaining)+' left → next day'}">`
+            +`<span class="id">${rel}${pg}${it.id}</span><span class="q">${kfmt(it.made)} ${glyph}</span></div>`;
+        }).join("");
+        const moreHtml = items.length>CAP? `<div class="more">+${items.length-CAP} more line items</div>`:'';
+        // release chips only for start-dated items that are NOT producing today (held / line full)
+        const producedIds = new Set(items.map(i=>i.id));
+        const heldRel = relList.filter(k=>!producedIds.has(k));
+        const relHtml = heldRel.length? `<div class="flags">`+heldRel.slice(0,20).map(k=>
+          `<div class="flag rel"><span>${k}</span><span>▶ start</span></div>`).join("")+`</div>`:'';
+        const tot = ld? `<span class="tot">${kfmt(ld.cone+ld.blunt)}</span>`:'';
+        cells+=`<div class="day${todayCls}">
+          <div class="dn"><span>${d}</span>${tot}</div>
+          ${relHtml}<div class="items">${itemsHtml}${moreHtml}</div>${dueHtml}</div>`;
+      }
+    }
+    const dows=DOW.map(x=>`<div class="dow">${x}</div>`).join("");
+    return `<div class="month"><h3>${MON[mi]} ${y}
+      <span class="mstat">${moCone?`${(moCone/1e6).toFixed(2)}M cones`:''}${moBlunt?` · ${fmt(moBlunt)} blunts`:''} planned</span></h3>
+      <div class="cal">${dows}${cells}</div></div>`;
+  }).join("");
+  document.getElementById("calMonths").innerHTML=html;
+}
+
+function renderPackaging(){
+  const packLoad=R.packLoad||{};
+  // dispatch-ready flags: item is dispatch-ready on its dispatch date (end of its pack day)
+  const dispatch={};
+  R.conf.filter(o=>o.qty>0&&o.dispatch).forEach(o=>{
+    const good=o.due? daysBetween(o.dispatch,o.due)>=0 : true;
+    (dispatch[o.dispatch]=dispatch[o.dispatch]||[]).push({label:o.key,cls:good?'ok':'late',mark:good?'✓':'!'});
+  });
+  const start=parse(R.startISO); let endISO=R.packLastISO||R.lastISO;
+  R.conf.forEach(o=>{ if(o.dispatch&&o.dispatch>endISO)endISO=o.dispatch; });
+  const end=parse(endISO), months=[];
+  let m=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth(),1));
+  const endM=new Date(Date.UTC(end.getUTCFullYear(),end.getUTCMonth(),1));
+  while(m<=endM){months.push(new Date(m)); m=new Date(Date.UTC(m.getUTCFullYear(),m.getUTCMonth()+1,1));}
+  const todayISO=DATA.generated;
+  const html=months.map(mo=>{
+    const y=mo.getUTCFullYear(), mi=mo.getUTCMonth();
+    const first=new Date(Date.UTC(y,mi,1)).getUTCDay(), dim=new Date(Date.UTC(y,mi+1,0)).getUTCDate();
+    let cells=""; for(let i=0;i<first;i++) cells+=`<div class="day empty"></div>`;
+    let moCone=0,moBlunt=0;
+    for(let d=1;d<=dim;d++){
+      const dISO=`${y}-${String(mi+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`, dt=parse(dISO);
+      const reason=closedReason(dt), ld=packLoad[dISO]; if(ld){moCone+=ld.cone;moBlunt+=ld.blunt;}
+      const dl=dispatch[dISO]||[];
+      const flags=dl.slice(0,20).map(f=>`<div class="flag ${f.cls}"><span>${f.label}</span><span>${f.mark}</span></div>`).join("");
+      const dueHtml=dl.length?`<div class="due"><span class="dlab">dispatch-ready</span><div class="flags">${flags}</div></div>`:'';
+      const todayCls=dISO===todayISO?' today':'';
+      if(reason){ cells+=`<div class="day off${todayCls}"><div class="dn"><span>${d}</span></div><div class="closed">${reason}</div>${dueHtml}</div>`; }
+      else {
+        const items=ld?ld.items:[];
+        const itemsHtml=items.slice(0,40).map(it=>`<div class="it ${it.type==='cone'?'c':'b'}" title="${it.id} · QC + pack ${fmt(it.made)} pcs"><span class="id">${it.id}</span><span class="q">${kfmt(it.made)}</span></div>`).join("");
+        const tot=ld?`<span class="tot">${kfmt(ld.cone+ld.blunt)}</span>`:'';
+        cells+=`<div class="day${todayCls}"><div class="dn"><span>${d}</span>${tot}</div><div class="items">${itemsHtml}</div>${dueHtml}</div>`;
+      }
+    }
+    const dows=DOW.map(x=>`<div class="dow">${x}</div>`).join("");
+    return `<div class="month"><h3>${MON[mi]} ${y}<span class="mstat">${moCone?`${(moCone/1e6).toFixed(2)}M cones`:''}${moBlunt?` · ${fmt(moBlunt)} blunts`:''} QC+packed</span></h3><div class="cal">${dows}${cells}</div></div>`;
+  }).join("");
+  document.getElementById("packMonths").innerHTML=html;
+}
+
+function renderAssump(){
+  document.getElementById("assump").innerHTML=
+   `<b>How this is calculated.</b> Only rows whose <b>Status column (M) is blank</b> are included at all — any row with a
+    status (Complete, Hold, Dispatched…) is treated as closed and does not appear in the order book, calendars, KPIs or
+    exports. Of those, a line item is scheduled only if it has <b>≥ 1000 pieces to produce</b>; smaller ones stay listed
+    but are kept off the calendar (marked “excluded”). Each scheduled line item runs its <b>target quantity for production start date</b> when set,
+    otherwise its <b>Pending Production</b>. Each SKU is capped at its own <b>max production output per day</b> (blank →
+    default ${fmt(R.cap.cone)} cones / ${fmt(R.cap.blunt)} blunts): a line-day is shared by production rate, so a slow
+    SKU eats more of the day and takes longer, a fast SKU less. Work is loaded onto two independent
+    lines — cones @ ${fmt(R.cap.cone)}/day and blunts @ ${fmt(R.cap.blunt)}/day — earliest ship-ready date first,
+    from ${fmtDate(R.startISO)}. The factory runs every working day — Mon–Sat — while there is any backlog;
+    Sundays and government holidays (${(R.holidays||[]).length? R.holidays.map(fmtDate).join(", "):'none set'}) are closed and left blank.
+    Production runs continuously and by <b>priority then ship-ready order</b> (high → medium → low; earliest ship-ready
+    first within a band). A line item with a <b>production start date</b> is held until that date, then produced — even a
+    high-priority item won't run before its start date. A line item whose ship-ready date has already passed is still
+    produced (never skipped), and once confirmed work is cleared the line keeps running on the next-due items — so building
+    ahead shortens future delivery. <b>QC + packaging</b> happen the next working day after a line item is produced, and
+    its <b>dispatch (cargo-ready) date is that packaging day</b> — CRD / ship-ready feasibility is graded against dispatch,
+    not the production-done date. “Blunt line” = items whose description contains blunt / DHW /
+    Dark Hemp Wrap / hemp-wrap tubes (the PO26126 glass-filter tubes and the DHW quotes); everything else runs on the cone line.
+    Change any control above and every view re-plans instantly. Ship-ready date “15 Sept 2026” text was read as 2026-09-15.
+    Figures are a capacity model, not a committed schedule — validate against real line availability and changeovers.`;
+}
+
+// ---------- wiring ----------
+function bindControls(){
+  const ci=document.getElementById("capCone"), bi=document.getElementById("capBlunt"),
+        sd=document.getElementById("startDate"), ie=document.getElementById("incEnq"),
+        hol=document.getElementById("holidays"), rm=document.getElementById("reserveManual");
+  const sync=()=>{ci.value=state.capCone;bi.value=state.capBlunt;sd.value=state.start;ie.checked=state.incEnq;
+    rm.checked=state.reserveManual; hol.value=(state.holidays||[]).join(", ");};
+  ci.oninput=()=>{state.capCone=+ci.value||0;render();};
+  bi.oninput=()=>{state.capBlunt=+bi.value||0;render();};
+  sd.onchange=()=>{state.start=sd.value||DEFAULTS.start;render();};
+  ie.onchange=()=>{state.incEnq=ie.checked;render();};
+  rm.onchange=()=>{state.reserveManual=rm.checked;render();};
+  hol.onchange=()=>{state.holidays=hol.value.split(",").map(s=>s.trim())
+    .filter(s=>/^\d{4}-\d{2}-\d{2}$/.test(s)); sync(); render();};
+  document.getElementById("reset").onclick=()=>{
+    Object.assign(state,DEFAULTS,{holidays:[...DEFAULTS.holidays]}); sync(); render();};
+  document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>{
+    document.querySelectorAll("#tabs button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");
+    ["overview","calendar","pack","orders","enq"].forEach(t=>
+      document.getElementById("tab-"+t).classList.toggle("hidden",t!==b.dataset.tab));});
+  // order-book filters
+  document.getElementById("filterPO").onchange=e=>{obFilterPO=e.target.value;renderOrders();};
+  document.getElementById("filterStatus").onchange=e=>{obFilterStatus=e.target.value;renderOrders();};
+  // downloads
+  document.getElementById("dlSummary").onclick=()=>exportSummary(false);
+  document.getElementById("dlSummaryF").onclick=()=>exportSummary(true);
+  document.getElementById("pdfProd").onclick=()=>exportDayPDF('prod');
+  document.getElementById("pdfPack").onclick=()=>exportDayPDF('pack');
+  sync();
+}
+bindControls();
+
+// ================= LIVE GOOGLE SHEET SYNC =================
+const LS={urls:"solf_urls",snap:"solf_snap"};
+const store={get(k){try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}},
+  del(k){try{localStorage.removeItem(k);}catch(e){}}};
+function todayLocal(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+
+function parseCSV(text){
+  const rows=[];let row=[],cur="",q=false;
+  for(let i=0;i<text.length;i++){const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else { if(c==='"')q=true; else if(c===','){row.push(cur);cur="";}
+      else if(c==='\n'){row.push(cur);rows.push(row);row=[];cur="";}
+      else if(c==='\r'){} else cur+=c; } }
+  if(cur!==""||row.length){row.push(cur);rows.push(row);}
+  return rows.filter(r=>r.some(x=>String(x).trim()!==""));
+}
+function rowsToObjects(rows){ if(!rows.length)return[]; const hdr=rows[0].map(h=>String(h).trim());
+  return rows.slice(1).map(r=>{const o={};hdr.forEach((h,i)=>o[h]=r[i]!==undefined?r[i]:"");return o;}); }
+function col(obj,...aliases){ const keys=Object.keys(obj), norm=k=>k.toLowerCase().replace(/\s+/g,' ').trim();
+  for(const a of aliases){const k=keys.find(k=>norm(k)===a.toLowerCase());if(k)return obj[k];}
+  for(const a of aliases){const k=keys.find(k=>norm(k).includes(a.toLowerCase()));if(k)return obj[k];}
+  return undefined; }
+const MON3={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+function pdate(v){ if(v==null)return null; let s=String(v).trim(); if(!s)return null; let m;
+  if(m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))return `${m[1]}-${String(+m[2]).padStart(2,'0')}-${String(+m[3]).padStart(2,'0')}`;
+  if(m=s.match(/^(\d{1,2})\s+([A-Za-z]+)\.?\s+(\d{4})/)){const mo=MON3[m[2].slice(0,3).toLowerCase()];if(mo)return `${m[3]}-${String(mo).padStart(2,'0')}-${String(+m[1]).padStart(2,'0')}`;}
+  if(m=s.match(/^([A-Za-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})/)){const mo=MON3[m[1].slice(0,3).toLowerCase()];if(mo)return `${m[3]}-${String(mo).padStart(2,'0')}-${String(+m[2]).padStart(2,'0')}`;}
+  if(m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/)){let a=+m[1],b=+m[2],y=+m[3],day,mon; if(a>12){day=a;mon=b;}else if(b>12){mon=a;day=b;}else{day=a;mon=b;} return `${y}-${String(mon).padStart(2,'0')}-${String(day).padStart(2,'0')}`;}
+  const d=new Date(s); if(!isNaN(d))return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return null; }
+function pint(v){const n=parseInt(String(v==null?'':v).replace(/[^0-9.\-]/g,''),10);return isNaN(n)?0:n;}
+function pintN(v){const s=String(v==null?'':v).replace(/[^0-9.\-]/g,'');if(s==='')return null;const n=parseInt(s,10);return isNaN(n)||n<=0?null:n;}
+function isBluntJS(d){d=String(d==null?'':d).replace(/\s+/g,' ').toLowerCase();return d.includes('blunt')||d.includes('dhw')||d.includes('dark hemp wrap')||(d.includes('tube')&&d.includes('hemp wrap'));}
+function pprio(v){const s=String(v==null?'':v).trim().toLowerCase();return['high','medium','low'].includes(s)?s:'medium';}
+
+function mapConfirmed(objs){ const out=[];let lastCo=null,lastPo=null;
+  for(const o of objs){ const idv=col(o,'unique id'); if(idv==null||String(idv).trim()==='')continue;
+    const cov=col(o,'customer name','customer'); if(cov)lastCo=cov; const pov=col(o,'po'); if(pov)lastPo=pov;
+    const desc=String(col(o,'description')||'').replace(/\s+/g,' ').trim();
+    out.push({id:String(idv).trim(),company:cov||lastCo,po:pov||lastPo,desc,
+      po_ok:pint(col(o,'po ok pcs')),done:pint(col(o,'till total production done')),
+      pending:Math.max(0,pint(col(o,'pending production'))),
+      ship_ready:pdate(col(o,'ship ready date')),type:isBluntJS(desc)?'blunt':'cone',
+      priority:pprio(col(o,'priority')),prod_start:pdate(col(o,'production start date')),
+      tgt_qty:pintN(col(o,'target quantity for production start date','target quantity')),
+      max_out:pintN(col(o,'max production output per sku','max production output')),
+      sheet_status:String(col(o,'status')||'').trim()}); }
+  return out; }
+function mapEnq(objs){ const out=[];
+  for(const o of objs){ const qv=col(o,'quote'); if(qv==null||String(qv).trim()==='')continue;
+    const product=col(o,'product/service','product'),desc=col(o,'description');
+    out.push({quote:String(qv).trim(),company:col(o,'company name','company'),
+      crd:pdate(col(o,'estimated crd','crd')),product,desc,qty:pint(col(o,'qty','quantity')),
+      type:isBluntJS((product||'')+' '+(desc||''))?'blunt':'cone',priority:'medium',prod_start:null,tgt_qty:null,max_out:null}); }
+  return out; }
+function normalizeSheetURL(u){
+  u=(u||"").trim(); if(!u) return u;
+  let gid=null, m=u.match(/[?&#]gid=(\d+)/); if(m) gid=m[1];
+  if(/\/spreadsheets\/d\/e\//.test(u)){                       // published-to-web link
+    if(/output=csv/.test(u)) return u;
+    let base=u.split('/pub')[0];
+    let out=base+'/pub?single=true&output=csv'; if(gid) out+='&gid='+gid; return out;
+  }
+  m=u.match(/\/spreadsheets\/d\/([a-zA-Z0-9\-_]+)/);          // normal edit/share link → gviz CSV export
+  if(m){ let out=`https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv`; if(gid) out+='&gid='+gid; return out; }
+  return u;
+}
+async function fetchCSV(url){
+  const tries=[['direct',url],
+    ['proxy1','https://corsproxy.io/?url='+encodeURIComponent(url)],
+    ['proxy2','https://api.allorigins.win/raw?url='+encodeURIComponent(url)]];
+  const errs=[];
+  for(const [name,t] of tries){
+    try{
+      const res=await fetch(t,{cache:'no-store'});
+      if(!res.ok){ errs.push(name+' HTTP'+res.status); continue; }
+      const txt=await res.text();
+      if(/^\s*(<!doctype html|<html)/i.test(txt)){ errs.push(name+' got-webpage'); continue; }
+      if(!txt.trim()){ errs.push(name+' empty'); continue; }
+      return txt;
+    }catch(e){ errs.push(name+' '+(e.name==='TypeError'?'blocked':(e.message||'err'))); }
+  }
+  throw new Error(errs.join(' · '));
+}
+function extractId(s){ const m=String(s||'').match(/\/spreadsheets\/d\/([a-zA-Z0-9\-_]+)/); return m?m[1]:String(s||'').trim(); }
+async function fetchSheetAPI(id,key,sheetName){
+  const u=`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(id)}/values/${encodeURIComponent(sheetName)}?key=${encodeURIComponent(key)}`;
+  const res=await fetch(u,{cache:'no-store'});
+  let data; try{data=await res.json();}catch(e){data=null;}
+  if(!res.ok){ throw new Error((data&&data.error&&data.error.message)||('HTTP '+res.status)); }
+  const values=(data&&data.values)||[];
+  if(!values.length) throw new Error(`tab "${sheetName}" is empty or not found`);
+  return values;   // array of arrays; values[0] = header row
+}
+function connectedCfg(){ const c=store.get(LS.urls); if(!c) return null;
+  if(c.mode==='api') return (c.id&&c.key)?c:null; return c.u1?c:null; }
+
+let syncState={connected:false,lastTs:null,completedTotal:0,completed:[]};
+
+function applyData(conf,enq){
+  const newPending={}; conf.forEach(o=>newPending[o.id]=o.pending);
+  const snap=store.get(LS.snap); let completed=[],total=0;
+  if(snap&&snap.pending){ for(const o of conf){const prev=snap.pending[o.id]; if(prev!=null){const d=prev-o.pending; if(d>0){completed.push({id:o.id,qty:d});total+=d;}}} }
+  completed.sort((a,b)=>b.qty-a.qty);
+  store.set(LS.snap,{date:todayLocal(),ts:Date.now(),pending:newPending});
+  syncState={connected:true,lastTs:Date.now(),completedTotal:total,completed};
+  DATA={confirmed:conf,enquiries:enq,generated:todayLocal()};
+  state.start=todayLocal(); const sd=document.getElementById('startDate'); if(sd)sd.value=state.start;
+}
+async function refresh(){
+  const cfg=connectedCfg();
+  if(!cfg){setSyncStatus('sample');render();return;}
+  setSyncStatus('busy');
+  try{
+    let conf, enq=DATA.enquiries;
+    if(cfg.mode==='api'){
+      conf=mapConfirmed(rowsToObjects(await fetchSheetAPI(cfg.id,cfg.key,cfg.s1||'Sheet1')));
+      if(cfg.s3){ try{ const e=mapEnq(rowsToObjects(await fetchSheetAPI(cfg.id,cfg.key,cfg.s3))); if(e.length)enq=e; }catch(e){} }
+    } else {
+      conf=mapConfirmed(rowsToObjects(parseCSV(await fetchCSV(cfg.u1))));
+      if(cfg.u3){ try{ enq=mapEnq(rowsToObjects(parseCSV(await fetchCSV(cfg.u3)))); }catch(e){} }
+    }
+    if(!conf.length)throw new Error('no rows with a Unique ID — check tab name & headers');
+    applyData(conf,enq);
+    setSyncStatus('live'); render();
+  }catch(e){ setSyncStatus('err',e.message); }
+}
+function loadPastedCSV(){
+  const s1=document.getElementById('pasteS1').value, s3=document.getElementById('pasteS3').value, msg=document.getElementById('connMsg');
+  try{
+    const conf=mapConfirmed(rowsToObjects(parseCSV(s1)));
+    if(!conf.length) throw new Error('Sheet1 CSV has no rows with a Unique ID — paste the full sheet incl. headers.');
+    let enq=DATA.enquiries; if(s3.trim()){try{const e=mapEnq(rowsToObjects(parseCSV(s3))); if(e.length)enq=e;}catch(e){}}
+    applyData(conf,enq);
+    store.del(LS.urls);           // paste mode is manual, not live-URL
+    setSyncStatus('paste'); render();
+    msg.className='connMsg ok'; msg.textContent=`Loaded ${conf.length} line items from pasted CSV.`;
+    setTimeout(()=>document.getElementById('syncPanel').classList.add('hidden'),800);
+  }catch(e){ msg.className='connMsg err'; msg.textContent=e.message; }
+}
+function setSyncStatus(mode,msg){
+  const el=document.getElementById('syncStatus'),tx=document.getElementById('syncText'),btn=document.getElementById('refreshBtn');
+  el.classList.remove('live','err'); btn.classList.remove('busy');
+  if(mode==='sample')tx.textContent='Sample data — connect your Google Sheet to go live';
+  else if(mode==='busy'){tx.textContent='Syncing…';btn.classList.add('busy');}
+  else if(mode==='live'){el.classList.add('live');const t=new Date(syncState.lastTs);
+    tx.innerHTML=`<b>Live</b> · synced ${t.toLocaleString([],{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'})}`;}
+  else if(mode==='err'){el.classList.add('err');tx.innerHTML=`<b>Sync failed</b> — ${msg||'check link'} · showing last data`;}
+  else if(mode==='paste'){el.classList.add('live');tx.innerHTML=`<b>Loaded (pasted)</b> · manual · re-paste or use a live URL for auto-refresh`;}
+}
+function renderDaily(){
+  const grid=document.getElementById('dailyGrid'); if(!grid||!R)return;
+  const tISO=state.start; let nd=parse(tISO),guard=0; do{nd=new Date(nd.getTime()+DAY);guard++;}while(closedReason(nd)&&guard<30);
+  const ndISO=iso(nd), todayLoad=R.load[tISO], tomLoad=R.load[ndISO];
+  const backlog=R.conf.reduce((s,o)=>s+(o.excluded?0:Math.max(0,o.qty)),0);
+  const doneCell=syncState.connected
+    ? `<div class="d done"><div class="k">Completed since last sync</div><div class="v num">${kfmt(syncState.completedTotal)}</div><div class="s">${syncState.completed.length} line items</div></div>`
+    : `<div class="d done"><div class="k">Completed today</div><div class="v num">—</div><div class="s">connect sheet to track</div></div>`;
+  grid.innerHTML=doneCell
+    +`<div class="d fwd"><div class="k">Carry-forward backlog</div><div class="v num">${kfmt(backlog)}</div><div class="s">remaining to produce</div></div>`
+    +`<div class="d"><div class="k">Today · ${fmtDate(tISO)}</div><div class="v num">${todayLoad?kfmt(todayLoad.cone+todayLoad.blunt):'—'}</div><div class="s">${todayLoad?todayLoad.items.length+' items planned':'closed / none'}</div></div>`
+    +`<div class="d tom"><div class="k">Tomorrow · ${fmtDate(ndISO)}</div><div class="v num">${tomLoad?kfmt(tomLoad.cone+tomLoad.blunt):'—'}</div><div class="s">${tomLoad?tomLoad.items.length+' items planned':'closed / none'}</div></div>`;
+  document.getElementById('compList').innerHTML=(syncState.connected&&syncState.completed.length)
+    ? 'Done since last sync: '+syncState.completed.slice(0,12).map(c=>`${c.id} ${kfmt(c.qty)}`).join(' · ')+(syncState.completed.length>12?' …':'') : '';
+}
+function scheduleAutoRefresh(){
+  const now=new Date(),next=new Date(now); next.setHours(21,0,0,0);
+  if(next<=now)next.setDate(next.getDate()+1);
+  setTimeout(function tick(){ if(connectedCfg()) refresh(); setTimeout(tick,24*3600*1000); }, next-now);
+}
+// connect panel wiring
+document.getElementById('connectBtn').onclick=()=>{const u=store.get(LS.urls)||{};
+  document.getElementById('url1').value=u.mode!=='api'?(u.u1||''):''; document.getElementById('url3').value=u.mode!=='api'?(u.u3||''):'';
+  document.getElementById('apiId').value=u.mode==='api'?(u.id||''):''; document.getElementById('apiKey').value=u.mode==='api'?(u.key||''):'';
+  document.getElementById('apiS1').value=(u.mode==='api'&&u.s1)?u.s1:'Sheet1'; document.getElementById('apiS3').value=(u.mode==='api')?(u.s3||'Sheet3'):'Sheet3';
+  document.getElementById('connMsg').textContent=''; document.getElementById('syncPanel').classList.remove('hidden');};
+document.getElementById('closeConn').onclick=()=>document.getElementById('syncPanel').classList.add('hidden');
+document.getElementById('loadPaste').onclick=()=>loadPastedCSV();
+document.getElementById('refreshBtn').onclick=()=>{ if(connectedCfg()) refresh(); else document.getElementById('connectBtn').click(); };
+document.getElementById('disconnect').onclick=()=>{store.del(LS.urls);store.del(LS.snap);location.reload();};
+function afterConnect(msg){ if(document.getElementById('syncStatus').classList.contains('err')){msg.className='connMsg err';msg.textContent=document.getElementById('syncText').textContent;}
+  else{msg.className='connMsg ok';msg.textContent='Connected — data loaded.';setTimeout(()=>document.getElementById('syncPanel').classList.add('hidden'),700);} }
+document.getElementById('saveApi').onclick=async()=>{
+  const id=extractId(document.getElementById('apiId').value.trim()), key=document.getElementById('apiKey').value.trim();
+  const s1=document.getElementById('apiS1').value.trim()||'Sheet1', s3=document.getElementById('apiS3').value.trim();
+  const msg=document.getElementById('connMsg');
+  if(!id||!key){msg.className='connMsg err';msg.textContent='Enter the spreadsheet link/ID and the API key.';return;}
+  store.set(LS.urls,{mode:'api',id,key,s1,s3}); msg.className='connMsg';msg.textContent='Connecting via API…';
+  await refresh(); afterConnect(msg);
+};
+document.getElementById('saveConn').onclick=async()=>{
+  let u1=document.getElementById('url1').value.trim(),u3=document.getElementById('url3').value.trim(),msg=document.getElementById('connMsg');
+  if(!u1){msg.className='connMsg err';msg.textContent='Paste at least the Sheet1 CSV link.';return;}
+  u1=normalizeSheetURL(u1); u3=u3?normalizeSheetURL(u3):"";
+  document.getElementById('url1').value=u1; if(u3)document.getElementById('url3').value=u3;
+  store.set(LS.urls,{mode:'csv',u1,u3}); msg.className='connMsg';msg.textContent='Connecting…';
+  await refresh(); afterConnect(msg);
+};
+
+// ---- init: anchor plan to today, load live data if configured ----
+state.start=todayLocal(); DATA.generated=todayLocal(); document.getElementById('startDate').value=state.start;
+{const pd=document.getElementById('pdfDate'); if(pd&&!pd.value)pd.value=todayLocal();}
+if(connectedCfg()){ render(); refresh(); } else { setSyncStatus('sample'); render(); }
+scheduleAutoRefresh();
+</script>
+</body>
+</html>
