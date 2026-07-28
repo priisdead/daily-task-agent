@@ -175,6 +175,12 @@ def _raise_risk_tasks(records: list) -> int:
         (t.get("request") or "") for t in db.open_tasks())
     raised = 0
     for r in records:
+        # the factory's Status column overrides quantity math: completed,
+        # shipped, held or cancelled lines never raise risk tasks
+        st = (r.get("sheet_status") or "").lower()
+        if any(w in st for w in ("complete", "done", "shipped", "dispatch",
+                                 "hold", "cancel")):
+            continue
         # tiny leftover quantities and long-stale rows are noise, not risk
         if r["pending_qty"] < config.SHEET_RISK_MIN_PENDING or not r["ship_ready"]:
             continue
