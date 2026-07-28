@@ -20,8 +20,20 @@ def build() -> str:
     with_deadline = [t for t in open_tasks if (t.get("deadline") or "").strip()]
     queued = stats["emails"]["queued"] + stats["wa_messages"]["queued"]
 
+    ai_errors = sum(1 for e in db.events_since(since)
+                    if e.get("level") == "error" and e.get("source") in ("llm", "extractor"))
+    ok = queued == 0 and ai_errors == 0
+    verification = (
+        f"{'[OK]' if ok else '[ATTENTION]'} Accounting: {len(new_tasks)} tasks "
+        f"created, {len(skipped)} skipped with reason, {queued} awaiting AI, "
+        f"{ai_errors} AI errors — "
+        + ("every mail accounted for." if ok else "check /stats and PROBLEMS below.")
+    )
+
     lines = [
         f"TASK AGENT — DAILY DIGEST · {now_local.strftime('%A, %d %B %Y')}",
+        "",
+        verification,
         "",
         f"Open tasks: {len(open_tasks)}  ({len(high)} high priority)",
         f"New tasks in last 24h: {len(new_tasks)}",

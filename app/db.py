@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     status      TEXT DEFAULT 'open',
     remark      TEXT DEFAULT '',
     done_by     TEXT DEFAULT '',
+    scheduled_for TEXT DEFAULT '',
     created_at  TEXT,
     updated_at  TEXT
 );
@@ -164,8 +165,8 @@ def init_db() -> None:
             db.execute("ALTER TABLE tasks ADD COLUMN department TEXT DEFAULT ''")
     except Exception:
         pass  # column already there
-    # migrations for completion remarks + PO linkage
-    for _col in ("remark", "done_by", "po_number"):
+    # migrations for completion remarks + PO linkage + scheduling
+    for _col in ("remark", "done_by", "po_number", "scheduled_for"):
         try:
             with get_db() as db:
                 db.execute(f"ALTER TABLE tasks ADD COLUMN {_col} TEXT DEFAULT ''")
@@ -222,6 +223,15 @@ def add_task(t: dict) -> None:
                 t.get("po_number", ""), t.get("deadline", ""),
                 t.get("priority", "normal"), t.get("source", ""), "open", now, now,
             ),
+        )
+
+
+def set_task_schedule(task_id: int, day_iso: str) -> None:
+    """Schedule a task for a date (YYYY-MM-DD) or clear with ''."""
+    with get_db() as db:
+        db.execute(
+            _q("UPDATE tasks SET scheduled_for = ?, updated_at = ? WHERE id = ?"),
+            (day_iso, utcnow(), task_id),
         )
 
 

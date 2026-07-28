@@ -273,8 +273,9 @@ def _apply(result: dict, open_task_list: list) -> None:
 BATCH = 15          # messages per AI call — small enough that the model
                     # genuinely considers every single message
 MAX_BATCHES = 40    # safety valve per run
-BATCH_PAUSE = 8     # seconds between AI calls — stays under free-tier
-                    # requests-per-minute limits
+# Pause between AI calls: Gemini's free tier needs breathing room; the paid
+# Claude API doesn't — 1s is just politeness.
+BATCH_PAUSE = 1 if config.LLM_PROVIDER == "claude" else 8
 _run_lock = threading.Lock()   # never let two scans run at the same time
 
 

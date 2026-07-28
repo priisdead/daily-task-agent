@@ -114,6 +114,11 @@
     padding: 8px 10px; outline: none; }
   .report-box .lbl { font: 600 12px/1 "Inter"; color: var(--ink-3);
     letter-spacing: .06em; text-transform: uppercase; }
+  .sched input[type=date] { font: 500 12px/1 "Inter"; color: var(--ink-2);
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 100px; padding: 6px 9px; cursor: pointer; outline: none;
+    max-width: 138px; }
+  .sched input[type=date]:hover { border-color: var(--ink-3); }
   .doneform { display: flex; gap: 6px; align-items: center; }
   .doneform input { font: 400 12.5px/1 "Inter"; color: var(--ink);
     background: var(--surface); border: 1px solid var(--line);
@@ -170,6 +175,7 @@
     <span class="brand">Task Agent</span>
     <div class="actions">
       <a class="btn active" href="/?token={{ token }}">Tasks</a>
+      <a class="btn" href="/calendar?token={{ token }}">Calendar</a>
       {% if dept in ('admin', 'management', 'implementation') %}
       <a class="btn" href="/orders?token={{ token }}">Orders</a>
       {% endif %}
@@ -270,6 +276,11 @@
             {% if t.source %}<div class="src">&ldquo;{{ t.source }}&rdquo;</div>{% endif %}
           </div>
           {% if t.deadline %}<span class="due">Due {{ t.deadline }}</span>{% endif %}
+          <form class="sched" method="post" action="/tasks/{{ t.id }}/schedule?token={{ token }}"
+                title="Schedule this task for a date">
+            <input type="date" name="date" value="{{ t.scheduled_for }}"
+                   onchange="this.form.submit()">
+          </form>
           {% if dept == 'admin' %}
           <form class="assign" method="post" action="/tasks/{{ t.id }}/assign?token={{ token }}">
             <select name="department" onchange="this.form.submit()"

@@ -277,6 +277,58 @@ async def task_create(request: Request, token: str = Query("")):
     return RedirectResponse(url=f"/?token={token}", status_code=303)
 
 
+@app.post("/tasks/{task_id}/schedule")
+async def task_schedule(request: Request, task_id: int, token: str = Query("")):
+    """Schedule a task for a specific date (any logged-in user)."""
+    _dept_for(request, token)
+    form = await request.form()
+    day = str(form.get("date", "")).strip()
+    if day:
+        try:
+            datetime.strptime(day, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    db.set_task_schedule(task_id, day)
+    back = str(form.get("back", "")) or f"/?token={token}"
+    return RedirectResponse(url=back, status_code=303)
+
+
+@app.get("/calendar", response_class=HTMLResponse)
+async def calendar_page(request: Request, token: str = Query(""), date: str = Query("")):
+    """Day view: tasks scheduled for, created on, and completed on a date."""
+    try:
+        dept = _dept_for(request, token)
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=302)
+    from datetime import timedelta
+    from . import report
+    tz = ZoneInfo(config.TIMEZONE)
+    try:
+        day = (datetime.strptime(date, "%Y-%m-%d").date()
+               if date else datetime.now(tz).date())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+
+    all_tasks = db.all_tasks(limit=2000)
+    if dept not in ("admin", "management"):
+        all_tasks = [t for t in all_tasks if (t.get("department") or "") == dept]
+
+    iso = day.isoformat()
+    scheduled = [t for t in all_tasks if (t.get("scheduled_for") or "") == iso]
+    created = [t for t in all_tasks
+               if report._to_local_date(t.get("created_at") or "") == day]
+    completed = [t for t in all_tasks if t.get("status") == "done"
+                 and report._to_local_date(t.get("updated_at") or "") == day]
+    return templates.TemplateResponse(
+        request, "calendar.html",
+        {"token": token, "dept": dept, "day": iso,
+         "day_label": day.strftime("%A, %d %B %Y"),
+         "prev_day": (day - timedelta(days=1)).isoformat(),
+         "next_day": (day + timedelta(days=1)).isoformat(),
+         "scheduled": scheduled, "created": created, "completed": completed},
+    )
+
+
 @app.post("/tasks/{task_id}/done")
 async def task_done(request: Request, task_id: int, token: str = Query("")):
     _dept_for(request, token)  # any valid credential may close its tasks
