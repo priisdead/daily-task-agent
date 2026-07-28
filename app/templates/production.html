@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#14634E">
+<title>Production — Task Agent</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap');
+  :root { --bg:#FAF9F7; --surface:#fff; --ink:#1B1D1F; --ink-2:#5C6166;
+    --ink-3:#9AA0A6; --line:#ECEAE6; --accent:#14634E; --amber:#9A5B00; --red:#B3261E; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#121416; --surface:#1A1D20; --ink:#ECEDEE; --ink-2:#A6ACB2;
+      --ink-3:#6E7479; --line:#2A2E32; --accent:#3ECF9A; --amber:#E8A94C; --red:#F2887F; } }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink);
+    font:400 14px/1.55 "Inter",-apple-system,"Segoe UI",sans-serif; }
+  .wrap { max-width:960px; margin:0 auto; padding:0 20px 80px; }
+  .topbar { display:flex; justify-content:space-between; align-items:center;
+    padding:26px 0 0; flex-wrap:wrap; gap:10px; }
+  .brand { font:600 13px/1 "Inter"; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--ink-3); }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .btn { font:500 13px/1 "Inter"; color:var(--ink-2); background:none;
+    border:1px solid var(--line); border-radius:100px; padding:9px 16px;
+    cursor:pointer; text-decoration:none; }
+  .btn:hover { border-color:var(--ink-3); color:var(--ink); }
+  .btn.active { color:var(--ink); border-color:var(--ink-3); font-weight:600; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  h1 { font:600 34px/1.15 "Fraunces",Georgia,serif; margin-top:36px; }
+  .sub { color:var(--ink-2); margin-top:6px; font-size:13.5px; }
+  .stats { display:flex; gap:32px; margin:24px 0 8px; padding:16px 0;
+    border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+  .stat .n { font:600 24px/1 "Inter"; }
+  .stat .l { font-size:12px; color:var(--ink-3); margin-top:4px; }
+  .stat.red .n { color:var(--red); }
+  .stat.amber .n { color:var(--amber); }
+  .stat.green .n { color:var(--accent); }
+  .line { display:flex; gap:14px; align-items:center; padding:13px 0 13px 12px;
+    border-bottom:1px solid var(--line); border-left:3px solid var(--accent); margin:6px 0; }
+  .line.risk { border-left-color:var(--red);
+    background:color-mix(in srgb, var(--red) 4%, transparent); }
+  .line.donel { border-left-color:var(--ink-3); }
+  .grow { flex:1; min-width:0; }
+  .desc { font-weight:500; }
+  .meta { font-size:12.5px; color:var(--ink-2); margin-top:3px; }
+  .meta b { color:var(--ink); }
+  .bar { height:5px; background:var(--line); border-radius:100px; margin-top:8px;
+    max-width:340px; overflow:hidden; }
+  .bar i { display:block; height:100%; background:var(--accent); border-radius:100px; }
+  .line.risk .bar i { background:var(--red); }
+  .po-chip { flex:none; font:600 12.5px/1 "Inter"; color:var(--accent);
+    text-decoration:none; }
+  .ready { flex:none; font-size:12px; font-weight:600; color:var(--ink-2);
+    border:1px solid var(--line); border-radius:100px; padding:4px 11px; white-space:nowrap; }
+  .line.risk .ready { color:var(--red); border-color:var(--red); }
+  .none { padding:30px 0; color:var(--ink-3); max-width:560px; }
+  @media (max-width:640px) {
+    .wrap { padding:0 14px 60px; }
+    h1 { font-size:26px; margin-top:22px; }
+    .actions { width:100%; overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; }
+    .btn { padding:10px 14px; font-size:12.5px; white-space:nowrap; min-height:40px; }
+    .stats { gap:20px; }
+    .line { flex-wrap:wrap; }
+    .grow { flex:1 1 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="brand">Task Agent</span>
+    <div class="actions">
+      <a class="btn" href="/?token={{ token }}">Tasks</a>
+      <a class="btn" href="/calendar?token={{ token }}">Calendar</a>
+      {% if dept in ('admin', 'management', 'implementation') %}
+      <a class="btn" href="/orders?token={{ token }}">Orders</a>
+      {% endif %}
+      <span class="btn active">Production</span>
+      {% if dept == 'admin' %}
+      <a class="btn primary" href="/sync-sheets?token={{ token }}&back=1">Sync now</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <h1>Production</h1>
+  <div class="sub">Live from the factory sheet — internal execution of confirmed
+  orders, separate from client tasks.
+  {% if last_sync %}Last synced {{ last_sync[:16].replace('T',' ') }} UTC.{% endif %}</div>
+
+  {% if not configured %}
+  <div class="none"><b>Not connected yet.</b> Add SHEETS_API_KEY and
+  PROD_SHEET_ID in Render &rarr; Environment (the same spreadsheet link and
+  AIza key from the CXO dashboard's connect panel), then press Sync now.</div>
+  {% elif not rows %}
+  <div class="none">Connected, but no rows synced yet — press Sync now, or
+  wait for the next hourly sync.</div>
+  {% else %}
+
+  <div class="stats">
+    <div class="stat red"><div class="n">{{ n_risk }}</div><div class="l">At risk</div></div>
+    <div class="stat amber"><div class="n">{{ n_running }}</div><div class="l">In production</div></div>
+    <div class="stat green"><div class="n">{{ n_complete }}</div><div class="l">Complete</div></div>
+  </div>
+
+  {% for r in rows %}
+  <div class="line {{ 'risk' if r.at_risk }} {{ 'donel' if r.pending_qty <= 0 }}">
+    <div class="grow">
+      <div class="desc">{{ r.description or r.uid }}</div>
+      <div class="meta">
+        {{ r.customer or '—' }} &middot; <b>{{ '{:,}'.format(r.done_qty) }}</b> / {{ '{:,}'.format(r.po_qty) }} pcs
+        {% if r.pending_qty > 0 %} &middot; {{ '{:,}'.format(r.pending_qty) }} pending{% endif %}
+        {% if r.sheet_status %} &middot; {{ r.sheet_status }}{% endif %}
+      </div>
+      {% if r.po_qty > 0 %}
+      <div class="bar"><i style="width:{{ (100 * r.done_qty / r.po_qty) | round(0, 'floor') | int }}%"></i></div>
+      {% endif %}
+    </div>
+    {% if r.po_number and dept in ('admin', 'management', 'implementation') %}
+    <a class="po-chip" href="/orders/{{ r.po_number }}?token={{ token }}">{{ r.po_number }}</a>
+    {% elif r.po_number %}<span class="po-chip">{{ r.po_number }}</span>{% endif %}
+    {% if r.ship_ready %}<span class="ready">{{ 'OVERDUE' if r.at_risk and r.ship_ready < last_sync[:10] else 'ready' }} {{ r.ship_ready }}</span>{% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+</body>
+</html>

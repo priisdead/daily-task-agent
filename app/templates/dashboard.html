@@ -179,6 +179,9 @@
       {% if dept in ('admin', 'management', 'implementation') %}
       <a class="btn" href="/orders?token={{ token }}">Orders</a>
       {% endif %}
+      {% if dept in ('admin', 'management', 'implementation', 'production') %}
+      <a class="btn" href="/production?token={{ token }}">Production</a>
+      {% endif %}
       {% if dept == 'admin' %}
       <a class="btn" href="/mails?token={{ token }}">Mails</a>
       <a class="btn" href="/whatsapp?token={{ token }}">WhatsApp</a>

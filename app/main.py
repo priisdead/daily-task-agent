@@ -483,16 +483,65 @@ async def order_update(request: Request, po_number: str, token: str = Query(""))
     return RedirectResponse(url=f"/orders/{po_number}?token={token}", status_code=303)
 
 
-@app.get("/sync-sheets", response_class=PlainTextResponse)
-async def sync_sheets_now(request: Request, token: str = Query("")):
-    """Pull the production sheet right now (admin only) and show the result."""
+def _production_access(request: Request, token: str) -> str:
+    """The Production page is internal-working: production, implementation,
+    management (view) and admin."""
+    dept = _dept_for(request, token)
+    if dept not in ("admin", "management", "implementation", "production"):
+        raise HTTPException(status_code=403, detail="no access to production")
+    return dept
+
+
+@app.get("/production", response_class=HTMLResponse)
+async def production_page(request: Request, token: str = Query("")):
+    """The factory sheet, inside the agent: every line with progress and
+    at-risk highlighting. Separate from client tasks by design."""
+    try:
+        dept = _production_access(request, token)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            return RedirectResponse(url="/login", status_code=302)
+        raise
+    from datetime import date as _date, timedelta as _td
+    today = datetime.now(ZoneInfo(config.TIMEZONE)).date()
+    horizon = today + _td(days=config.SHEET_RISK_DAYS)
+    rows = db.production_all()
+    at_risk = complete = running = 0
+    for r in rows:
+        r["at_risk"] = False
+        if r["pending_qty"] <= 0:
+            complete += 1
+            continue
+        running += 1
+        try:
+            ready = _date.fromisoformat(r.get("ship_ready") or "")
+            if ready <= horizon:
+                r["at_risk"] = True
+                at_risk += 1
+        except ValueError:
+            pass
+    return templates.TemplateResponse(
+        request, "production.html",
+        {"token": token, "dept": dept, "rows": rows,
+         "configured": sheets.configured(),
+         "last_sync": db.production_last_sync(),
+         "n_risk": at_risk, "n_running": running, "n_complete": complete},
+    )
+
+
+@app.get("/sync-sheets")
+async def sync_sheets_now(request: Request, token: str = Query(""), back: int = Query(0)):
+    """Pull the production sheet right now (admin only)."""
     _check_token(request, token)
     if not sheets.configured():
-        return ("Production sheet sync is not configured yet.\n"
-                "Set SHEETS_API_KEY and PROD_SHEET_ID in Render -> Environment "
-                "(the same values from the dashboard's connect panel).")
+        return PlainTextResponse(
+            "Production sheet sync is not configured yet.\n"
+            "Set SHEETS_API_KEY and PROD_SHEET_ID in Render -> Environment "
+            "(the same values from the dashboard's connect panel).")
     result = await asyncio.to_thread(sheets.sync_production)
-    return f"Sync result: {result}"
+    if back:
+        return RedirectResponse(url=f"/production?token={token}", status_code=303)
+    return PlainTextResponse(f"Sync result: {result}")
 
 
 @app.get("/report.pdf")

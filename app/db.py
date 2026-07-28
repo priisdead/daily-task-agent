@@ -292,6 +292,14 @@ def production_for_po(po_number: str) -> list:
                " ORDER BY uid"), (po_number.strip().upper(),)))
 
 
+def production_all() -> list:
+    with get_db() as db:
+        return _rows(db.execute(
+            "SELECT * FROM production_rows"
+            " ORDER BY CASE WHEN ship_ready = '' THEN 1 ELSE 0 END,"
+            " ship_ready, po_number, uid"))
+
+
 def production_last_sync() -> str:
     with get_db() as db:
         rows = _rows(db.execute(
