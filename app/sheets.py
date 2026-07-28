@@ -83,6 +83,12 @@ def rows_to_records(values: list) -> list:
     headers = [_norm(h) for h in values[0]]
 
     def idx(*names):
+        # exact header match wins first (so "po" finds "PO", not "PO Date"),
+        # then fall back to contains-matching
+        for n in names:
+            for i, h in enumerate(headers):
+                if n == h:
+                    return i
         for n in names:
             for i, h in enumerate(headers):
                 if n in h:
@@ -147,9 +153,8 @@ def sync_production() -> dict:
                               config.SHEETS_API_KEY)
         records = rows_to_records(values)
         db.replace_production_rows(records)
-        for r in records:
-            if r["po_number"]:
-                db.upsert_po(r["po_number"], r["customer"])
+        db.upsert_pos_bulk([(r["po_number"], r["customer"])
+                            for r in records if r["po_number"]])
         risks = _raise_risk_tasks(records)
         log.info("sheet sync: %d rows, %d at-risk tasks raised",
                  len(records), risks)
@@ -165,17 +170,19 @@ def _raise_risk_tasks(records: list) -> int:
     date is within RISK_DAYS (or already past). One open task per line."""
     today = datetime.now(ZoneInfo(config.TIMEZONE)).date()
     horizon = today + timedelta(days=config.SHEET_RISK_DAYS)
+    lookback = today - timedelta(days=config.SHEET_RISK_LOOKBACK_DAYS)
     open_reqs = " ".join(
         (t.get("request") or "") for t in db.open_tasks())
     raised = 0
     for r in records:
-        if r["pending_qty"] <= 0 or not r["ship_ready"]:
+        # tiny leftover quantities and long-stale rows are noise, not risk
+        if r["pending_qty"] < config.SHEET_RISK_MIN_PENDING or not r["ship_ready"]:
             continue
         try:
             ready = date.fromisoformat(r["ship_ready"])
         except ValueError:
             continue
-        if ready > horizon:
+        if ready > horizon or ready < lookback:
             continue
         marker = f"[{r['uid']}]"
         if marker in open_reqs:

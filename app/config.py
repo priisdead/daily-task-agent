@@ -114,6 +114,10 @@ PROD_SHEET_ID = os.getenv("PROD_SHEET_ID", "")
 PROD_SHEET_TAB = os.getenv("PROD_SHEET_TAB", "Sheet1")
 SHEET_SYNC_MINUTES = int(os.getenv("SHEET_SYNC_MINUTES", "60"))
 SHEET_RISK_DAYS = int(os.getenv("SHEET_RISK_DAYS", "2"))
+# Only raise at-risk tasks for meaningful pending quantities and reasonably
+# current ship-ready dates (ignore stale rows from weeks ago).
+SHEET_RISK_MIN_PENDING = int(os.getenv("SHEET_RISK_MIN_PENDING", "100"))
+SHEET_RISK_LOOKBACK_DAYS = int(os.getenv("SHEET_RISK_LOOKBACK_DAYS", "7"))
 
 # ── Email login (RBAC) ───────────────────────────────────────────────────────
 # Signs session cookies; set to a long random string in production.

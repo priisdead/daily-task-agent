@@ -98,8 +98,9 @@
   {% else %}
 
   <div class="stats">
-    <div class="stat red"><div class="n">{{ n_risk }}</div><div class="l">At risk</div></div>
-    <div class="stat amber"><div class="n">{{ n_running }}</div><div class="l">In production</div></div>
+    <div class="stat red"><div class="n">{{ n_overdue }}</div><div class="l">Overdue</div></div>
+    <div class="stat amber"><div class="n">{{ n_risk }}</div><div class="l">At risk</div></div>
+    <div class="stat"><div class="n">{{ n_running }}</div><div class="l">In production</div></div>
     <div class="stat green"><div class="n">{{ n_complete }}</div><div class="l">Complete</div></div>
   </div>
 
@@ -119,7 +120,7 @@
     {% if r.po_number and dept in ('admin', 'management', 'implementation') %}
     <a class="po-chip" href="/orders/{{ r.po_number }}?token={{ token }}">{{ r.po_number }}</a>
     {% elif r.po_number %}<span class="po-chip">{{ r.po_number }}</span>{% endif %}
-    {% if r.ship_ready %}<span class="ready">{{ 'OVERDUE' if r.at_risk and r.ship_ready < last_sync[:10] else 'ready' }} {{ r.ship_ready }}</span>{% endif %}
+    {% if r.ship_ready %}<span class="ready">{{ 'OVERDUE' if r.overdue else 'ready' }} {{ r.ship_ready }}</span>{% endif %}
   </div>
   {% endfor %}
   {% endif %}

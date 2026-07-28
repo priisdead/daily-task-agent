@@ -506,26 +506,39 @@ async def production_page(request: Request, token: str = Query("")):
     today = datetime.now(ZoneInfo(config.TIMEZONE)).date()
     horizon = today + _td(days=config.SHEET_RISK_DAYS)
     rows = db.production_all()
-    at_risk = complete = running = 0
+    overdue = at_risk = complete = running = 0
     for r in rows:
-        r["at_risk"] = False
+        r["at_risk"] = r["overdue"] = False
         if r["pending_qty"] <= 0:
             complete += 1
             continue
         running += 1
         try:
             ready = _date.fromisoformat(r.get("ship_ready") or "")
-            if ready <= horizon:
-                r["at_risk"] = True
-                at_risk += 1
         except ValueError:
-            pass
+            continue
+        if ready < today:
+            r["overdue"] = r["at_risk"] = True
+            overdue += 1
+        elif ready <= horizon:
+            r["at_risk"] = True
+            at_risk += 1
+
+    def _order(r):
+        # overdue first (most overdue on top), then at-risk, then running
+        # by ship date, complete last
+        bucket = 0 if r["overdue"] else (1 if r["at_risk"] else
+                                         (2 if r["pending_qty"] > 0 else 3))
+        return (bucket, r.get("ship_ready") or "9999-12-31")
+
+    rows.sort(key=_order)
     return templates.TemplateResponse(
         request, "production.html",
         {"token": token, "dept": dept, "rows": rows,
          "configured": sheets.configured(),
          "last_sync": db.production_last_sync(),
-         "n_risk": at_risk, "n_running": running, "n_complete": complete},
+         "n_overdue": overdue, "n_risk": at_risk,
+         "n_running": running, "n_complete": complete},
     )
 
 
@@ -538,9 +551,11 @@ async def sync_sheets_now(request: Request, token: str = Query(""), back: int = 
             "Production sheet sync is not configured yet.\n"
             "Set SHEETS_API_KEY and PROD_SHEET_ID in Render -> Environment "
             "(the same values from the dashboard's connect panel).")
-    result = await asyncio.to_thread(sheets.sync_production)
     if back:
+        # fire-and-forget: the button returns instantly, sync runs behind
+        asyncio.get_running_loop().run_in_executor(None, sheets.sync_production)
         return RedirectResponse(url=f"/production?token={token}", status_code=303)
+    result = await asyncio.to_thread(sheets.sync_production)
     return PlainTextResponse(f"Sync result: {result}")
 
 

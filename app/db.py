@@ -269,20 +269,45 @@ def mark_processed(table: str, ids: list) -> None:
 # ── production sheet rows ────────────────────────────────────────────────────
 
 def replace_production_rows(records: list) -> None:
-    """The sheet is the source of truth — replace our copy wholesale."""
+    """The sheet is the source of truth — replace our copy wholesale.
+    Bulk insert on ONE connection: a remote Postgres charges a network
+    round-trip per statement, so 320 single INSERTs took ~a minute."""
     now = utcnow()
+    rows = [(r["uid"], r["po_number"], r["customer"], r["description"],
+             r["po_qty"], r["done_qty"], r["pending_qty"], r["ship_ready"],
+             r["priority"], r["prod_start"], r["sheet_status"], now)
+            for r in records]
+    sql = _q("INSERT INTO production_rows (uid, po_number, customer,"
+             " description, po_qty, done_qty, pending_qty, ship_ready,"
+             " priority, prod_start, sheet_status, synced_at)"
+             " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
     with get_db() as db:
         db.execute("DELETE FROM production_rows")
-        for r in records:
-            db.execute(
-                _q("INSERT INTO production_rows (uid, po_number, customer,"
-                   " description, po_qty, done_qty, pending_qty, ship_ready,"
-                   " priority, prod_start, sheet_status, synced_at)"
-                   " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"),
-                (r["uid"], r["po_number"], r["customer"], r["description"],
-                 r["po_qty"], r["done_qty"], r["pending_qty"], r["ship_ready"],
-                 r["priority"], r["prod_start"], r["sheet_status"], now),
-            )
+        if not rows:
+            return
+        cur = db.cursor() if IS_PG else db
+        cur.executemany(sql, rows)
+
+
+def upsert_pos_bulk(pairs: list) -> None:
+    """Create many PO records in one connection. pairs = [(po_number, client)]."""
+    now = utcnow()
+    seen: dict[str, str] = {}
+    for po, client in pairs:
+        po = (po or "").strip().upper()
+        if po and (po not in seen or (client and not seen[po])):
+            seen[po] = client or seen.get(po, "")
+    if not seen:
+        return
+    sql = ("INSERT INTO purchase_orders (po_number, client, status, created_at,"
+           " updated_at) VALUES (?,?,?,?,?)")
+    sql += " ON CONFLICT (po_number) DO NOTHING" if IS_PG else ""
+    if not IS_PG:
+        sql = sql.replace("INSERT INTO", "INSERT OR IGNORE INTO")
+    rows = [(po, client, "received", now, now) for po, client in seen.items()]
+    with get_db() as db:
+        cur = db.cursor() if IS_PG else db
+        cur.executemany(_q(sql), rows)
 
 
 def production_for_po(po_number: str) -> list:
