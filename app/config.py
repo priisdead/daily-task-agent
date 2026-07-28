@@ -97,6 +97,11 @@ for _pair in os.getenv("DEPT_TOKENS", "").replace(";", ",").split(","):
 DEPARTMENTS = ["admin", "logistics", "production", "accounts", "design",
                "implementation", "qc", "management", "hr"]
 
+# May the AI close tasks? Default NO: when the AI believes a task is
+# complete (e.g. owner replied "sent"), it only moves it to in_progress —
+# a HUMAN presses Done (with remark). Set "true" to restore auto-closing.
+AI_MAY_CLOSE_TASKS = os.getenv("AI_MAY_CLOSE_TASKS", "false").lower() == "true"
+
 # Purchase-order lifecycle (Orders page). Edit to match your workflow.
 PO_STATUSES = ["received", "in_production", "ready", "shipped",
                "delivered", "paid", "cancelled"]

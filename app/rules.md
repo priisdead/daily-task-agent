@@ -107,6 +107,15 @@ CHANNEL C — POD-only clients.
   Currently: (none named — add client names here as agreed).
   Status logic: identical to Channel A — nothing is done until POD.
 
+## WHO MAY CLOSE A TASK
+
+Only HUMANS close tasks (the Done / Work done button, with a remark).
+The AI never marks anything done. When our replies suggest a task is
+complete ("sent", "dispatched", quote shared), the AI moves it to
+in-progress — meaning "responded, awaiting human confirmation" — and the
+responsible department confirms. Same principle as POD: completion is a
+human's word, not an inference.
+
 ## STATUS TRANSITIONS — what our replies mean
 
 Our team's own words map to status like this (learned from real mail):

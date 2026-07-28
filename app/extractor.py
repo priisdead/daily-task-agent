@@ -89,7 +89,7 @@ Return ONLY a JSON object, no prose, with this exact shape:
     }
   ],
   "in_progress_task_ids": [integers — task IDs the owner has ACKNOWLEDGED or committed to (e.g. replied "ok, will send it", "working on it", "sure, by Monday")],
-  "resolved_task_ids": [integers — task IDs that are COMPLETED, cancelled, or superseded (e.g. owner replied "sent", "dispatched", "done", or requester withdrew)],
+  "resolved_task_ids": [integers — task IDs that APPEAR completed, cancelled, or superseded (e.g. owner replied "sent", "dispatched"). NOTE: the system does not auto-close these; they are parked for human confirmation],
   "skipped": [{"from": "sender", "why": "reason in max 8 words"} — one entry for EVERY new message that produced no task, so nothing is silently dropped]
 }
 
@@ -260,8 +260,14 @@ def _apply(result: dict, open_task_list: list) -> None:
         if isinstance(tid, int) and tid in valid_ids:
             db.set_task_status(tid, "in_progress")
     for tid in result["resolved_task_ids"]:
-        if isinstance(tid, int) and tid in valid_ids:
-            db.set_task_status(tid, "done")
+        if not (isinstance(tid, int) and tid in valid_ids):
+            continue
+        if config.AI_MAY_CLOSE_TASKS:
+            db.set_task_status(tid, "done", done_by="agent")
+        else:
+            # The AI never closes tasks. Its "this looks complete" signal
+            # parks the task as in_progress; a HUMAN confirms with Done.
+            db.set_task_status(tid, "in_progress")
 
 
 BATCH = 15          # messages per AI call — small enough that the model
