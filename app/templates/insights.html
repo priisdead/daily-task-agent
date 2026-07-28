@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#14634E">
+<title>Insights — Task Agent</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap');
+  :root { --bg:#FAF9F7; --ink:#1B1D1F; --ink-2:#5C6166; --ink-3:#9AA0A6;
+    --line:#ECEAE6; --accent:#14634E; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#121416; --ink:#ECEDEE; --ink-2:#A6ACB2; --ink-3:#6E7479;
+      --line:#2A2E32; --accent:#3ECF9A; } }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink);
+    font:400 14px/1.55 "Inter",-apple-system,"Segoe UI",sans-serif; }
+  .wrap { max-width:900px; margin:0 auto; padding:0 20px 80px; }
+  .topbar { display:flex; justify-content:space-between; align-items:center;
+    padding:26px 0 0; flex-wrap:wrap; gap:10px; }
+  .brand { font:600 13px/1 "Inter"; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--ink-3); }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .btn { font:500 13px/1 "Inter"; color:var(--ink-2); background:none;
+    border:1px solid var(--line); border-radius:100px; padding:9px 16px;
+    cursor:pointer; text-decoration:none; }
+  .btn:hover { border-color:var(--ink-3); }
+  .btn.active { color:var(--ink); border-color:var(--ink-3); font-weight:600; }
+  h1 { font:600 34px/1.15 "Fraunces",Georgia,serif; margin:36px 0 4px; }
+  .sub { color:var(--ink-2); font-size:13.5px; margin-bottom:10px; }
+
+  /* ── viz system (light+dark selected, palette-validated) ── */
+  .viz-root { color-scheme:light;
+    --surface-1:#fcfcfb; --text-primary:#0b0b0b; --text-secondary:#52514e;
+    --muted:#898781; --grid:#e1e0d9; --baseline:#c3c2b7;
+    --series-1:#2a78d6; --series-2:#eb6834;
+    --st-good:#0ca30c; --st-warn:#fab219; --st-serious:#ec835a; --st-crit:#d03b3b;
+    --seq-250:#86b6ef; --seq-350:#5598e7; --seq-450:#2a78d6; --seq-500:#256abf;
+    --seq-550:#1c5cab; --seq-650:#104281; }
+  @media (prefers-color-scheme: dark) {
+    .viz-root { color-scheme:dark;
+      --surface-1:#1a1a19; --text-primary:#ffffff; --text-secondary:#c3c2b7;
+      --muted:#898781; --grid:#2c2c2a; --baseline:#383835;
+      --series-1:#3987e5; --series-2:#d95926;
+      --seq-250:#86b6ef; --seq-350:#5598e7; --seq-450:#3987e5; --seq-500:#256abf;
+      --seq-550:#1c5cab; --seq-650:#104281; } }
+  .card { background:var(--surface-1); border:1px solid var(--line);
+    border-radius:14px; padding:18px 20px 20px; margin-top:18px;
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    color:var(--text-primary); }
+  .card h2 { font:600 13.5px/1.3 system-ui; color:var(--text-primary); }
+  .card .note { font-size:12px; color:var(--muted); margin-top:2px; }
+
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:10px; margin-top:18px; }
+  .tile { background:var(--surface-1); border:1px solid var(--line);
+    border-radius:14px; padding:14px 16px;
+    font-family:system-ui,sans-serif; }
+  .tile .v { font:600 30px/1 system-ui; color:var(--text-primary); }
+  .tile .l { display:flex; gap:6px; align-items:center; font-size:12px;
+    color:var(--text-secondary); margin-top:6px; }
+  .dot { width:9px; height:9px; border-radius:50%; flex:none; }
+
+  .hbar { margin-top:12px; }
+  .hbar .rowb { display:flex; align-items:center; gap:10px; margin-top:8px; }
+  .hbar .lbl { flex:none; width:120px; font-size:12.5px; color:var(--text-secondary);
+    text-align:right; }
+  .hbar .track { flex:1; display:flex; align-items:center; gap:8px; }
+  .hbar .bar { height:16px; border-radius:0 4px 4px 0; min-width:2px;
+    transition:opacity .15s; }
+  .hbar .rowb:hover .bar { opacity:.85; }
+  .hbar .val { font-size:12px; color:var(--text-primary); font-weight:600;
+    font-variant-numeric:tabular-nums; }
+
+  .stack { display:flex; height:22px; border-radius:5px; overflow:hidden;
+    gap:2px; margin-top:14px; background:var(--surface-1); }
+  .stack i { display:block; height:100%; }
+  .legend { display:flex; flex-wrap:wrap; gap:12px 18px; margin-top:12px; }
+  .legend .it { display:flex; gap:7px; align-items:center; font-size:12.5px;
+    color:var(--text-secondary); }
+  .legend .sw { width:10px; height:10px; border-radius:3px; flex:none; }
+  .legend b { color:var(--text-primary); }
+
+  svg text { font:11px system-ui; fill:var(--muted); }
+  svg .endlbl { font:600 11.5px system-ui; }
+  .pt { opacity:0; }
+  .pt:hover { opacity:1; }
+  details.tbl { margin-top:12px; font-size:12.5px; color:var(--text-secondary); }
+  details.tbl table { border-collapse:collapse; margin-top:8px;
+    font-variant-numeric:tabular-nums; }
+  details.tbl td, details.tbl th { border:1px solid var(--grid); padding:4px 9px; }
+  @media (max-width:640px) {
+    .wrap { padding:0 14px 60px; }
+    h1 { font-size:26px; }
+    .actions { width:100%; overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; }
+    .btn { white-space:nowrap; min-height:40px; }
+    .hbar .lbl { width:86px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="brand">Task Agent</span>
+    <div class="actions">
+      <a class="btn" href="/?token={{ token }}">Tasks</a>
+      <a class="btn" href="/calendar?token={{ token }}">Calendar</a>
+      <a class="btn" href="/orders?token={{ token }}">Orders</a>
+      <a class="btn" href="/production?token={{ token }}">Production</a>
+      <span class="btn active">Insights</span>
+    </div>
+  </div>
+
+  <h1>Insights</h1>
+  <div class="sub">Orders and tasks at a glance — live from the factory sheet
+  and the task database.</div>
+
+  <div class="viz-root">
+
+    <div class="tiles">
+      <div class="tile"><div class="v">{{ prod.overdue }}</div>
+        <div class="l"><span class="dot" style="background:var(--st-crit)"></span>&#9888; Overdue orders</div></div>
+      <div class="tile"><div class="v">{{ prod.risk }}</div>
+        <div class="l"><span class="dot" style="background:var(--st-warn)"></span>&#9200; At risk</div></div>
+      <div class="tile"><div class="v">{{ prod.running }}</div>
+        <div class="l"><span class="dot" style="background:var(--series-1)"></span>In production</div></div>
+      <div class="tile"><div class="v">{{ prod.complete }}</div>
+        <div class="l"><span class="dot" style="background:var(--st-good)"></span>&#10003; Completed</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Production lines — completed vs pending</h2>
+      <div class="note">{{ prod_total }} lines from the factory sheet</div>
+      <div class="hbar">
+        {% for key, label, color in [('complete','Completed','var(--st-good)'),
+                                     ('running','In production','var(--series-1)'),
+                                     ('risk','At risk','var(--st-warn)'),
+                                     ('overdue','Overdue','var(--st-crit)')] %}
+        <div class="rowb" title="{{ label }}: {{ prod[key] }} of {{ prod_total }} lines">
+          <span class="lbl">{{ label }}</span>
+          <span class="track">
+            <span class="bar" style="width:{{ (100 * prod[key] / prod_total) | round(1) }}%;background:{{ color }}"></span>
+            <span class="val">{{ prod[key] }}</span>
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Task flow — created vs completed, last 14 days</h2>
+      <div class="note">{{ days_label }}</div>
+      <svg viewBox="0 0 {{ svg_w }} {{ svg_h }}" style="width:100%;margin-top:10px" role="img"
+           aria-label="Tasks created and completed per day over the last 14 days">
+        {% for f in [0, 0.5, 1] %}
+        <line x1="34" x2="{{ svg_w - 6 }}" y1="{{ 10 + 156 * f }}" y2="{{ 10 + 156 * f }}"
+              stroke="var(--grid)" stroke-width="1"/>
+        <text x="28" y="{{ 14 + 156 * f }}" text-anchor="end">{{ (ymax * (1 - f)) | round(0) | int }}</text>
+        {% endfor %}
+        <line x1="34" x2="{{ svg_w - 6 }}" y1="166" y2="166" stroke="var(--baseline)" stroke-width="1"/>
+        <polyline points="{{ poly_created }}" fill="none" stroke="var(--series-1)" stroke-width="2"/>
+        <polyline points="{{ poly_completed }}" fill="none" stroke="var(--series-2)" stroke-width="2"/>
+        {% for p in line_created %}
+        <g class="pt"><circle cx="{{ p.x }}" cy="{{ p.y }}" r="4" fill="var(--series-1)"/>
+          <title>{{ p.label }}: {{ p.v }} created</title></g>
+        <circle cx="{{ p.x }}" cy="{{ p.y }}" r="9" fill="transparent">
+          <title>{{ p.label }}: {{ p.v }} created</title></circle>
+        {% endfor %}
+        {% for p in line_completed %}
+        <g class="pt"><circle cx="{{ p.x }}" cy="{{ p.y }}" r="4" fill="var(--series-2)"/>
+          <title>{{ p.label }}: {{ p.v }} completed</title></g>
+        <circle cx="{{ p.x }}" cy="{{ p.y }}" r="9" fill="transparent">
+          <title>{{ p.label }}: {{ p.v }} completed</title></circle>
+        {% endfor %}
+        <text class="endlbl" x="{{ line_created[-1].x - 4 }}" y="{{ line_created[-1].y - 8 }}"
+              text-anchor="end" fill="var(--series-1)">created</text>
+        <text class="endlbl" x="{{ line_completed[-1].x - 4 }}" y="{{ line_completed[-1].y + 16 }}"
+              text-anchor="end" fill="var(--series-2)">completed</text>
+        <text x="34" y="{{ svg_h - 2 }}">{{ line_created[0].label }}</text>
+        <text x="{{ svg_w - 6 }}" y="{{ svg_h - 2 }}" text-anchor="end">{{ line_created[-1].label }}</text>
+      </svg>
+      <div class="legend">
+        <span class="it"><span class="sw" style="background:var(--series-1)"></span>Created</span>
+        <span class="it"><span class="sw" style="background:var(--series-2)"></span>Completed</span>
+      </div>
+      <details class="tbl"><summary>Table view</summary>
+        <table><tr><th>Day</th><th>Created</th><th>Completed</th></tr>
+        {% for p in line_created %}
+        <tr><td>{{ p.label }}</td><td>{{ p.v }}</td><td>{{ line_completed[loop.index0].v }}</td></tr>
+        {% endfor %}</table>
+      </details>
+    </div>
+
+    <div class="card">
+      <h2>Open tasks by department</h2>
+      <div class="note">open + in-progress right now</div>
+      <div class="hbar">
+        {% for d, n in dept_rows %}
+        <div class="rowb" title="{{ d }}: {{ n }} open tasks">
+          <span class="lbl">{{ 'QC' if d == 'qc' else d | capitalize }}</span>
+          <span class="track">
+            <span class="bar" style="width:{{ (100 * n / dept_max) | round(1) }}%;background:var(--seq-450)"></span>
+            <span class="val">{{ n }}</span>
+          </span>
+        </div>
+        {% else %}<div class="note">No open tasks — enjoy it while it lasts.</div>{% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>PO pipeline</h2>
+      <div class="note">{{ po_total }} purchase orders by stage</div>
+      <div class="stack">
+        {% for s, color in [('received','var(--seq-250)'), ('in_production','var(--seq-350)'),
+                            ('ready','var(--seq-450)'), ('shipped','var(--seq-500)'),
+                            ('delivered','var(--seq-550)'), ('paid','var(--seq-650)'),
+                            ('cancelled','var(--muted)')] %}
+        {% if po_counts[s] %}
+        <i style="width:{{ (100 * po_counts[s] / po_total) | round(1) }}%;background:{{ color }}"
+           title="{{ s.replace('_',' ') }}: {{ po_counts[s] }}"></i>
+        {% endif %}
+        {% endfor %}
+      </div>
+      <div class="legend">
+        {% for s, color in [('received','var(--seq-250)'), ('in_production','var(--seq-350)'),
+                            ('ready','var(--seq-450)'), ('shipped','var(--seq-500)'),
+                            ('delivered','var(--seq-550)'), ('paid','var(--seq-650)'),
+                            ('cancelled','var(--muted)')] %}
+        <span class="it"><span class="sw" style="background:{{ color }}"></span>
+          {{ s.replace('_',' ') }} <b>{{ po_counts[s] }}</b></span>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

@@ -492,6 +492,97 @@ def _production_access(request: Request, token: str) -> str:
     return dept
 
 
+@app.get("/insights", response_class=HTMLResponse)
+async def insights_page(request: Request, token: str = Query("")):
+    """Charts: production completed vs pending, tasks by department,
+    14-day task flow, PO pipeline. Admin + management."""
+    try:
+        dept = _dept_for(request, token)
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=302)
+    if dept not in ("admin", "management"):
+        raise HTTPException(status_code=403, detail="admin or management only")
+
+    from datetime import date as _date, timedelta as _td
+    from . import report
+    tz = ZoneInfo(config.TIMEZONE)
+    today = datetime.now(tz).date()
+    horizon = today + _td(days=config.SHEET_RISK_DAYS)
+
+    # production states
+    prod = {"overdue": 0, "risk": 0, "running": 0, "complete": 0}
+    for r in db.production_all():
+        if r["pending_qty"] <= 0:
+            prod["complete"] += 1
+            continue
+        try:
+            ready = _date.fromisoformat(r.get("ship_ready") or "")
+        except ValueError:
+            prod["running"] += 1
+            continue
+        if ready < today:
+            prod["overdue"] += 1
+        elif ready <= horizon:
+            prod["risk"] += 1
+        else:
+            prod["running"] += 1
+    prod_total = sum(prod.values()) or 1
+
+    tasks = db.all_tasks(limit=2000)
+    open_by_dept: dict[str, int] = {}
+    for t in tasks:
+        if t.get("status") in ("open", "in_progress"):
+            d = t.get("department") or "unassigned"
+            open_by_dept[d] = open_by_dept.get(d, 0) + 1
+    dept_rows = sorted(open_by_dept.items(), key=lambda kv: -kv[1])
+    dept_max = max([n for _, n in dept_rows] or [1])
+
+    # 14-day created vs completed
+    days = [today - _td(days=i) for i in range(13, -1, -1)]
+    created = {d: 0 for d in days}
+    completed = {d: 0 for d in days}
+    for t in tasks:
+        c = report._to_local_date(t.get("created_at") or "")
+        if c in created:
+            created[c] += 1
+        if t.get("status") == "done":
+            u = report._to_local_date(t.get("updated_at") or "")
+            if u in completed:
+                completed[u] += 1
+    # precompute SVG geometry
+    W, H, PL, PB, PT = 640, 190, 34, 24, 10
+    ymax = max(list(created.values()) + list(completed.values()) + [1])
+    step = (W - PL - 8) / (len(days) - 1)
+    def _pts(series):
+        out = []
+        for i, d in enumerate(days):
+            x = PL + i * step
+            y = PT + (H - PT - PB) * (1 - series[d] / ymax)
+            out.append({"x": round(x, 1), "y": round(y, 1),
+                        "v": series[d], "label": d.strftime("%d %b")})
+        return out
+    line_created = _pts(created)
+    line_completed = _pts(completed)
+
+    po_counts = {s: 0 for s in config.PO_STATUSES}
+    for p in db.list_pos():
+        if p["status"] in po_counts:
+            po_counts[p["status"]] += 1
+    po_total = sum(po_counts.values()) or 1
+
+    return templates.TemplateResponse(
+        request, "insights.html",
+        {"token": token, "dept": dept, "prod": prod, "prod_total": prod_total,
+         "dept_rows": dept_rows, "dept_max": dept_max,
+         "line_created": line_created, "line_completed": line_completed,
+         "poly_created": " ".join(f"{p['x']},{p['y']}" for p in line_created),
+         "poly_completed": " ".join(f"{p['x']},{p['y']}" for p in line_completed),
+         "ymax": ymax, "svg_w": W, "svg_h": H,
+         "po_counts": po_counts, "po_total": po_total,
+         "days_label": f"{days[0].strftime('%d %b')} – {days[-1].strftime('%d %b')}"},
+    )
+
+
 @app.get("/dashboard", response_class=HTMLResponse)
 async def cxo_dashboard(request: Request, token: str = Query(""), po: str = Query("")):
     """The CXO Production dashboard, hosted inside the agent behind login.
