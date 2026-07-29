@@ -177,7 +177,7 @@ def _is_internal(t: dict) -> bool:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, token: str = Query(""), q: str = Query(""), po: str = Query(""), merged: str = Query(""), view: str = Query("client")):
+async def dashboard(request: Request, token: str = Query(""), q: str = Query(""), po: str = Query(""), merged: str = Query(""), view: str = Query("client"), closed: str = Query("")):
     try:
         dept = _dept_for(request, token)
     except HTTPException:
@@ -212,12 +212,20 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
     # Team page). A PO deep-link ignores the split so nothing hides.
     n_client = sum(1 for t in tasks if not _is_internal(t))
     n_internal = sum(1 for t in tasks if _is_internal(t))
-    view = "internal" if view == "internal" else "client"
-    if not po_filter:
+    review = [t for t in tasks if (t.get("close_at") or "")]
+    review.sort(key=lambda t: (0 if t.get("close_conf") == "high" else 1,
+                               t.get("close_at") or ""), reverse=False)
+    n_review = len(review)
+    n_review_high = sum(1 for t in review if t.get("close_conf") == "high")
+    if view not in ("client", "internal", "review"):
+        view = "client"
+    if not po_filter and view != "review":
         want_internal = view == "internal"
         tasks = [t for t in tasks if _is_internal(t) == want_internal]
         done_today = [t for t in done_today if _is_internal(t) == want_internal]
         archive = [t for t in archive if _is_internal(t) == want_internal]
+    if view == "review":
+        tasks = []          # the review tab renders its own list
     by_client: dict[str, list] = {}
     for t in tasks:
         by_client.setdefault(t["client"] or "Unknown", []).append(t)
@@ -244,6 +252,10 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
             "view": view,
             "n_client": n_client,
             "n_internal": n_internal,
+            "review": review,
+            "n_review": n_review,
+            "n_review_high": n_review_high,
+            "closed": closed,
             "date_str": today.strftime("%A, %d %B %Y"),
             "by_client": by_client,
             "open_count": sum(1 for t in tasks if t["status"] == "open"),
@@ -754,6 +766,57 @@ async def production_page(request: Request, token: str = Query("")):
          "last_sync": db.production_last_sync(),
          "total": sum(len(v) for v in buckets.values())},
     )
+
+
+@app.post("/tasks/{task_id}/close-confirm")
+async def close_confirm(request: Request, task_id: int, token: str = Query("")):
+    """Human confirms the agent's 'looks done' reading — one click, and the
+    agent's evidence is kept as the remark so the record explains itself."""
+    dept = _dept_for(request, token)
+    form = await request.form()
+    user = _session_user(request)
+    task = next((t for t in db.open_tasks() if t["id"] == task_id), None)
+    if not task:
+        raise HTTPException(status_code=404, detail="task not found")
+    if dept not in ("admin", "management") and (task.get("department") or "") != dept:
+        raise HTTPException(status_code=403, detail="not your department's task")
+    typed = str(form.get("remark", "")).strip()
+    remark = typed or f"confirmed done — {task.get('close_why') or 'agent flagged complete'}"
+    db.set_task_status(task_id, "done", remark=remark[:500],
+                       done_by=(user or {}).get("email", "confirmed by human"))
+    return RedirectResponse(url=f"/?token={token}&view=review", status_code=303)
+
+
+@app.post("/tasks/{task_id}/close-dismiss")
+async def close_dismiss(request: Request, task_id: int, token: str = Query("")):
+    """'Not yet' — keep the task open, drop the suggestion."""
+    dept = _dept_for(request, token)
+    task = next((t for t in db.open_tasks() if t["id"] == task_id), None)
+    if not task:
+        raise HTTPException(status_code=404, detail="task not found")
+    if dept not in ("admin", "management") and (task.get("department") or "") != dept:
+        raise HTTPException(status_code=403, detail="not your department's task")
+    db.clear_close_suggestion(task_id)
+    return RedirectResponse(url=f"/?token={token}&view=review", status_code=303)
+
+
+@app.post("/tasks/close-all-high")
+async def close_all_high(request: Request, token: str = Query("")):
+    """Confirm every HIGH-confidence suggestion at once (admin only).
+    Medium-confidence ones always stay one-by-one — that is the point."""
+    if _dept_for(request, token) != "admin":
+        raise HTTPException(status_code=403, detail="admin only")
+    user = _session_user(request)
+    n = 0
+    for t in db.ready_to_close():
+        if (t.get("close_conf") or "") != "high":
+            continue
+        db.set_task_status(
+            t["id"], "done",
+            remark=f"confirmed done (bulk) — {t.get('close_why') or 'agent flagged complete'}"[:500],
+            done_by=(user or {}).get("email", "confirmed by human"))
+        n += 1
+    return RedirectResponse(url=f"/?token={token}&view=review&closed={n}", status_code=303)
 
 
 @app.post("/dedupe")

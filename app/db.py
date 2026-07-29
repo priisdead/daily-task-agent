@@ -56,6 +56,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     remark      TEXT DEFAULT '',
     done_by     TEXT DEFAULT '',
     scheduled_for TEXT DEFAULT '',
+    close_why   TEXT DEFAULT '',
+    close_quote TEXT DEFAULT '',
+    close_conf  TEXT DEFAULT '',
+    close_at    TEXT DEFAULT '',
     created_at  TEXT,
     updated_at  TEXT
 );
@@ -181,7 +185,8 @@ def init_db() -> None:
     except Exception:
         pass  # column already there
     # migrations for completion remarks + PO linkage + scheduling
-    for _col in ("remark", "done_by", "po_number", "scheduled_for"):
+    for _col in ("remark", "done_by", "po_number", "scheduled_for",
+                 "close_why", "close_quote", "close_conf", "close_at"):
         try:
             with get_db() as db:
                 db.execute(f"ALTER TABLE tasks ADD COLUMN {_col} TEXT DEFAULT ''")
@@ -262,6 +267,10 @@ def set_task_status(task_id: int, status: str, remark: str | None = None,
                     done_by: str | None = None) -> None:
     sets = ["status = ?", "updated_at = ?"]
     vals: list = [status, utcnow()]
+    if status in ("done", "open"):
+        # the suggestion has been acted on (or the task reopened) — retire it
+        sets += ["close_why = ''", "close_quote = ''", "close_conf = ''",
+                 "close_at = ''"]
     if remark is not None and remark.strip():
         sets.append("remark = ?")
         vals.append(remark.strip()[:500])
@@ -602,6 +611,40 @@ def open_tasks() -> list:
         return _rows(db.execute(
             "SELECT * FROM tasks WHERE status IN ('open', 'in_progress')"
             " ORDER BY client, id"))
+
+
+def suggest_close(task_id: int, why: str, quote: str, conf: str) -> None:
+    """File the AI's 'this looks done' reading against a task, with the
+    evidence, so a human can confirm it without reopening the mailbox."""
+    with get_db() as db:
+        db.execute(
+            _q("UPDATE tasks SET close_why = ?, close_quote = ?, close_conf = ?,"
+               " close_at = ? WHERE id = ?"),
+            (why[:200], quote[:300], conf[:10], utcnow(), task_id),
+        )
+
+
+def clear_close_suggestion(task_id: int) -> None:
+    """'Not yet' — drop the suggestion, leave the task open."""
+    with get_db() as db:
+        db.execute(
+            _q("UPDATE tasks SET close_why = '', close_quote = '',"
+               " close_conf = '', close_at = '', updated_at = ? WHERE id = ?"),
+            (utcnow(), task_id),
+        )
+
+
+def ready_to_close(department: str = "") -> list:
+    """Open/in-progress tasks the AI believes are finished, newest first."""
+    sql = ("SELECT * FROM tasks WHERE status IN ('open', 'in_progress')"
+           " AND close_at <> ''")
+    params: list = []
+    if department:
+        sql += " AND department = ?"
+        params.append(department)
+    sql += " ORDER BY CASE WHEN close_conf = 'high' THEN 0 ELSE 1 END, close_at DESC"
+    with get_db() as db:
+        return _rows(db.execute(_q(sql), params) if params else db.execute(sql))
 
 
 def dedupe_open_tasks() -> int:

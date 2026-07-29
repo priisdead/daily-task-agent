@@ -90,6 +90,7 @@ Return ONLY a JSON object, no prose, with this exact shape:
   ],
   "in_progress_task_ids": [integers — task IDs the owner has ACKNOWLEDGED or committed to (e.g. replied "ok, will send it", "working on it", "sure, by Monday")],
   "resolved_task_ids": [integers — task IDs that APPEAR completed, cancelled, or superseded (e.g. owner replied "sent", "dispatched"). NOTE: the system does not auto-close these; they are parked for human confirmation],
+  "closure_evidence": [{"id": integer — a task id you put in resolved_task_ids, "why": "why it looks done, max 20 words", "quote": "the exact sentence from the message that shows it, max 30 words", "confidence": "high" | "medium"} — one entry for EVERY id in resolved_task_ids, so a human can confirm the closure in one glance WITHOUT reopening the mailbox. "high" only when the evidence is explicit and the rulebook's channel test is satisfied],
   "skipped": [{"from": "sender", "why": "reason in max 8 words"} — one entry for EVERY new message that produced no task, so nothing is silently dropped]
 }
 
@@ -149,7 +150,7 @@ def _format_context(open_task_list, wa_msgs, emails) -> str:
 
 def _empty(failed: bool = False) -> dict:
     return {"new_tasks": [], "resolved_task_ids": [],
-            "in_progress_task_ids": [], "failed": failed}
+            "in_progress_task_ids": [], "closure_evidence": [], "failed": failed}
 
 
 def _call_claude(context: str) -> str:
@@ -259,15 +260,31 @@ def _apply(result: dict, open_task_list: list) -> None:
     for tid in result["in_progress_task_ids"]:
         if isinstance(tid, int) and tid in valid_ids:
             db.set_task_status(tid, "in_progress")
+    # The AI's "this looks complete" reading, with the evidence it found, so
+    # a human can confirm without going back to the mailbox.
+    evidence = {}
+    for e in (result.get("closure_evidence") or []):
+        try:
+            evidence[int(e.get("id"))] = e
+        except (TypeError, ValueError):
+            continue
     for tid in result["resolved_task_ids"]:
         if not (isinstance(tid, int) and tid in valid_ids):
             continue
         if config.AI_MAY_CLOSE_TASKS:
             db.set_task_status(tid, "done", done_by="agent")
-        else:
-            # The AI never closes tasks. Its "this looks complete" signal
-            # parks the task as in_progress; a HUMAN confirms with Done.
-            db.set_task_status(tid, "in_progress")
+            continue
+        # The AI never closes tasks. It parks the task as in_progress and
+        # files a closure suggestion for the Ready-to-close queue.
+        db.set_task_status(tid, "in_progress")
+        ev = evidence.get(tid, {})
+        why = str(ev.get("why") or "looks complete from the latest message")[:200]
+        quote = str(ev.get("quote") or "")[:300]
+        conf = "high" if str(ev.get("confidence", "")).lower() == "high" else "medium"
+        try:
+            db.suggest_close(tid, why, quote, conf)
+        except Exception:
+            log.exception("could not file closure suggestion for task %s", tid)
 
 
 BATCH = 15          # messages per AI call — small enough that the model
