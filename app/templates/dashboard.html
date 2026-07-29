@@ -181,6 +181,7 @@
       {% endif %}
       {% if dept in ('admin', 'management', 'implementation', 'production') %}
       <a class="btn" href="/production?token={{ token }}">Production</a>
+      <a class="btn" href="/team?token={{ token }}">Team</a>
       {% endif %}
       {% if dept in ('admin', 'management') %}
       <a class="btn" href="/insights?token={{ token }}">Insights</a>

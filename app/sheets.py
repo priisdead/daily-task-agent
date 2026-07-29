@@ -243,6 +243,86 @@ def rows_to_tracking(values: list) -> list:
     return out
 
 
+# ── Team KRA: per-stage SLAs (days after PO Date) — mirrors the CXO
+# dashboard's KRA_SLA table exactly, so both always show the same numbers.
+_KRA_SLA = [
+    (r"final\s*remark", None),          # no SLA
+    (r"final\s*po\s*closed", 20),
+    (r"po\s*created", 1),
+    (r"bom", 1),
+    (r"indent", 1),
+    (r"filter\s*/?\s*sticker\s*temp", 2),
+    (r"sample\s*picture", 2),
+    (r"paper\s*sent", 3),
+    (r"printing", 8),
+    (r"paper\s*receipt", 9),
+    (r"images\s*sent", 10),
+    (r"images\s*approved", 12),
+    (r"production\s*filter\s*cutting", 11),
+    (r"filter\s*breaking", 11),
+    (r"filter\s*folding", 13),
+    (r"paper\s*cutting", 11),
+    (r"tools\s*inspected", 12),
+    (r"received\s*from\s*packaging", 16),
+    (r"quality", 15),
+    (r"equalling|equaling", 15),
+    (r"packaging", 15),
+    (r"dispa", 18),                     # sheet spells it "Dispacthed"
+    (r"tracking", 19),
+    (r"pod", 20),
+    (r"^\s*(production|proction)\s*$", 13),
+]
+
+
+def sla_days_for(stage) -> int | None:
+    n = str(stage or "").lower()
+    for pat, d in _KRA_SLA:
+        if re.search(pat, n):
+            return d
+    return None
+
+
+def team_pastdue() -> list:
+    """One row per past-due stage task across all non-closed POs.
+    Due date = PO Date + the stage's SLA days (same rule as the CXO
+    dashboard). Sorted worst-first."""
+    import json as _json
+    today = datetime.now(ZoneInfo(config.TIMEZONE)).date()
+    rows = []
+    for r in db.tracking_all():
+        if (r.get("track_status") or "") == "closed" or not r.get("po_date"):
+            continue
+        try:
+            pod = date.fromisoformat(r["po_date"])
+        except ValueError:
+            continue
+        try:
+            stages = _json.loads(r.get("stages_json") or "[]")
+        except ValueError:
+            continue
+        for s in stages:
+            if s.get("done"):
+                continue
+            sla = sla_days_for(s.get("stage"))
+            if sla is None:
+                continue
+            due = pod + timedelta(days=sla)
+            late = (today - due).days
+            if late <= 0:
+                continue
+            rows.append({
+                "owner": (s.get("owner") or "").strip() or "(no owner)",
+                "stage": s.get("stage") or "",
+                "po_number": r["po_number"],
+                "customer": r.get("customer") or "",
+                "po_date": r["po_date"],
+                "due": due.isoformat(),
+                "days_late": late,
+            })
+    rows.sort(key=lambda x: -x["days_late"])
+    return rows
+
+
 def sync_tracking() -> dict:
     """Pull the stage-tracking sheet, store it, raise tasks for stuck orders."""
     if not tracking_configured():

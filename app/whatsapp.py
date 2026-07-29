@@ -148,6 +148,12 @@ async def handle_webhook_payload(payload: dict) -> int:
                 else:
                     body = f"[{msg_type} message]"
 
+                # Meta flags forwards — surface it so the AI applies the
+                # group-bridge rules (sender is our messenger, not the client)
+                ctx = msg.get("context", {})
+                if ctx.get("forwarded") or ctx.get("frequently_forwarded"):
+                    body = f"[FORWARDED] {body}"
+
                 if db.save_wa_message(
                     wa_id, sender, names.get(sender, ""), body, msg_type, media_path, ts
                 ):

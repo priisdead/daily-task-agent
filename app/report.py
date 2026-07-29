@@ -141,3 +141,61 @@ def build_daily_pdf(day: date) -> bytes:
         f"({config.TIMEZONE}) by Task Agent", _SMALL))
     doc.build(story)
     return buf.getvalue()
+
+
+def build_team_pdf(rows: list, owner: str = "") -> bytes:
+    """Past-due stage tasks (Team KRA view) as a PDF — whole team or one
+    person. `rows` come from sheets.team_pastdue(), already worst-first."""
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, topMargin=16 * mm, bottomMargin=16 * mm,
+        leftMargin=15 * mm, rightMargin=15 * mm,
+        title="Past-due tasks — Team KRA")
+    day = datetime.now(ZoneInfo(config.TIMEZONE)).date()
+    story = [
+        Paragraph("Past-due tasks — Team KRA", _H1),
+        Paragraph(
+            (f"{owner} · " if owner else "All teams · ")
+            + f"{len(rows)} task{'s' if len(rows) != 1 else ''} past due"
+            + (f" · worst {max(r['days_late'] for r in rows)} days late"
+               if rows else "")
+            + f" · {day.strftime('%d %b %Y')}", _META),
+        Spacer(1, 5 * mm),
+    ]
+    if not rows:
+        story.append(Paragraph(
+            "No past-due tasks — every stage is inside its SLA.", _BODY))
+    else:
+        data = [[Paragraph(h, _SMALL) for h in
+                 ("Owner", "Stage", "PO", "Customer", "Due", "Late by")]]
+        for r in rows:
+            late = Paragraph(
+                f'<font color="#B3261E"><b>{r["days_late"]}d</b></font>', _BODY)
+            data.append([
+                Paragraph(r["owner"][:30], _BODY),
+                Paragraph(r["stage"][:60], _BODY),
+                Paragraph(r["po_number"][:20], _BODY),
+                Paragraph((r["customer"] or "—")[:30], _SMALL),
+                Paragraph(r["due"], _SMALL),
+                late,
+            ])
+        table = Table(
+            data, colWidths=[30 * mm, 52 * mm, 24 * mm, 34 * mm, 22 * mm, 16 * mm],
+            repeatRows=1)
+        table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LINEBELOW", (0, 0), (-1, 0), 0.75, _LINE),
+            ("LINEBELOW", (0, 1), (-1, -1), 0.25, _LINE),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("LEFTPADDING", (0, 0), (-1, -1), 2),
+        ]))
+        story.append(table)
+    story.append(Spacer(1, 8 * mm))
+    story.append(Paragraph(
+        f"Due dates = PO Date + per-stage SLA days (same rules as the CXO "
+        f"dashboard). Generated "
+        f"{datetime.now(ZoneInfo(config.TIMEZONE)).strftime('%d %b %Y %H:%M')} "
+        f"({config.TIMEZONE}) by Task Agent", _SMALL))
+    doc.build(story)
+    return buf.getvalue()

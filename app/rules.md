@@ -170,6 +170,23 @@ Examples:
 - Client repeats a quote request but changes quantity 500k -> 750k
   -> NOT covered: new task, resolve the old one.
 
+## FORWARDED WHATSAPP MESSAGES (GROUP BRIDGE)
+
+Our team forwards actionable messages from WhatsApp GROUP chats to this
+agent's number, because the agent cannot sit in groups itself. For any
+WhatsApp message that looks forwarded (or where the text reads like a third
+party talking — e.g. a client's ask arriving from a teammate's number):
+- The SENDER of the forward is our messenger, NOT the client. Work out the
+  real client/company from the CONTENT (names, PO numbers, company names,
+  the note the teammate added like "Roboroots group" or "from K+N").
+- Create the task under that real client. If the content doesn't reveal
+  who it is, use the forwarder's hint; failing that, client = "WhatsApp
+  group (unidentified)" and department = admin so a human sorts it.
+- Never mark anything done from a forwarded message alone — same rules as
+  everywhere: humans close tasks.
+- A forwarded message is NEVER "already covered" just because the same
+  ask exists from email — if in doubt, create the task and let admin merge.
+
 ## GENERAL
 
 - Some emails include "[ATTACHMENT: filename]" sections — that is the TEXT

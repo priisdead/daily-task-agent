@@ -713,6 +713,75 @@ async def dedupe_tasks(request: Request, token: str = Query("")):
     return RedirectResponse(url=f"/?token={token}&merged={merged}", status_code=303)
 
 
+def _team_data(owner: str = ""):
+    """Past-due stage tasks + per-owner summary, optionally filtered."""
+    rows = sheets.team_pastdue()
+    by_owner: dict[str, list] = {}
+    for r in rows:
+        by_owner.setdefault(r["owner"], []).append(r)
+    summary = []
+    for o, rs in by_owner.items():
+        summary.append({
+            "owner": o,
+            "n": len(rs),
+            "pos": len({x["po_number"] for x in rs}),
+            "worst": max(x["days_late"] for x in rs),
+            "avg": round(sum(x["days_late"] for x in rs) / len(rs)),
+            "oldest": max(rs, key=lambda x: x["days_late"]),
+        })
+    summary.sort(key=lambda s: (-s["n"], -s["worst"]))
+    sel = owner.strip()
+    shown = by_owner.get(sel, []) if sel else rows
+    return rows, summary, sel, shown
+
+
+@app.get("/team", response_class=HTMLResponse)
+async def team_page(request: Request, token: str = Query(""), owner: str = Query("")):
+    """Team KRA view: who is sitting on which past-due stage, by how many
+    days. ?owner=Name gives each person a bookmarkable personal view."""
+    try:
+        dept = _production_access(request, token)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            return RedirectResponse(url="/login", status_code=302)
+        raise
+    rows, summary, sel, shown = _team_data(owner)
+    buckets = {"b13": 0, "b47": 0, "b814": 0, "b15": 0}
+    for r in rows:
+        d = r["days_late"]
+        buckets["b13" if d <= 3 else "b47" if d <= 7 else "b814" if d <= 14 else "b15"] += 1
+    return templates.TemplateResponse(
+        request, "team.html",
+        {"token": token, "dept": dept, "rows": rows, "summary": summary,
+         "sel": sel, "shown": shown, "buckets": buckets,
+         "pos_hit": len({r["po_number"] for r in rows}),
+         "worst": max((r["days_late"] for r in rows), default=0),
+         "configured": sheets.tracking_configured(),
+         "last_sync": db.production_last_sync()},
+    )
+
+
+@app.get("/team.pdf")
+async def team_pdf(request: Request, token: str = Query(""), owner: str = Query("")):
+    """Past-due report as PDF, optionally for one person."""
+    try:
+        _production_access(request, token)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            return RedirectResponse(url="/login", status_code=302)
+        raise
+    from . import report
+    rows, summary, sel, shown = _team_data(owner)
+    data = await asyncio.to_thread(report.build_team_pdf, shown, sel)
+    name = f"SOL_PastDue_{datetime.now(ZoneInfo(config.TIMEZONE)).date().isoformat()}"
+    if sel:
+        name += "_" + "".join(c for c in sel if c.isalnum())
+    return Response(
+        content=data, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'},
+    )
+
+
 @app.get("/sync-sheets")
 async def sync_sheets_now(request: Request, token: str = Query(""), back: int = Query(0)):
     """Pull the production sheet right now (admin only)."""
