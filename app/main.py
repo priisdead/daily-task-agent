@@ -207,13 +207,13 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
         tasks = [t for t in tasks if _matches(t, query)]
         done_today = [t for t in done_today if _matches(t, query)]
         archive = [t for t in archive if _matches(t, query)]
-    # Departments work in two tabs: client tasks (mail/WhatsApp) and
-    # internal tasks (assigned from the Team KRA / factory sheets).
-    # Admin keeps one combined view.
+    # Everyone works in two sections: client tasks (mail/WhatsApp) and
+    # internal tasks (raised by the factory-sheet syncs / assigned from the
+    # Team page). A PO deep-link ignores the split so nothing hides.
     n_client = sum(1 for t in tasks if not _is_internal(t))
     n_internal = sum(1 for t in tasks if _is_internal(t))
     view = "internal" if view == "internal" else "client"
-    if dept != "admin":
+    if not po_filter:
         want_internal = view == "internal"
         tasks = [t for t in tasks if _is_internal(t) == want_internal]
         done_today = [t for t in done_today if _is_internal(t) == want_internal]

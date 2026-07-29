@@ -227,14 +227,16 @@
   <h1>Today{% if dept == 'qc' %} — QC{% elif dept != 'admin' %} — {{ dept|capitalize }}{% endif %}</h1>
   <div class="date">{{ date_str }}{% if dept == 'management' %} &middot; all departments, oversight view{% elif dept != 'admin' %} &middot; your department's tasks{% endif %}</div>
 
-  {% if dept != 'admin' %}
+  {% if not po %}
   <div class="worktabs">
-    <a class="wtab {% if view != 'internal' %}on{% endif %}" href="/?token={{ token }}&view=client">Client tasks
+    <a class="wtab {% if view != 'internal' %}on{% endif %}"
+       href="/?token={{ token }}&view=client{% if q %}&q={{ q|urlencode }}{% endif %}">Client tasks
       <span class="wn">{{ n_client }}</span></a>
-    <a class="wtab {% if view == 'internal' %}on{% endif %}" href="/?token={{ token }}&view=internal">Internal tasks
+    <a class="wtab {% if view == 'internal' %}on{% endif %}"
+       href="/?token={{ token }}&view=internal{% if q %}&q={{ q|urlencode }}{% endif %}">Internal &middot; from sheets
       <span class="wn">{{ n_internal }}</span></a>
   </div>
-  <div class="scanline">{% if view == 'internal' %}Work assigned from the factory sheets — production stages and order tracking.{% else %}Asks that came in by email or WhatsApp.{% endif %}</div>
+  <div class="scanline">{% if view == 'internal' %}Raised automatically by the factory-sheet sync, or assigned from the Team page &mdash; not client mail.{% else %}Asks that came in by email or WhatsApp.{% endif %}</div>
   {% endif %}
 
   {% if po %}<div style="background:var(--accent);color:#fff;padding:10px 16px;border-radius:8px;font-weight:600;margin-top:20px;display:inline-block">PO {{ po }}</div>{% endif %}
