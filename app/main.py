@@ -158,8 +158,14 @@ def _matches(t: dict, q: str) -> bool:
     return q in hay
 
 
+def _is_internal(t: dict) -> bool:
+    """Internal work comes from our own sheets (Team KRA assignments,
+    production risk, stage tracking). Client work comes from mail/WhatsApp."""
+    return (t.get("channel") or "") == "sheet"
+
+
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, token: str = Query(""), q: str = Query(""), po: str = Query(""), merged: str = Query("")):
+async def dashboard(request: Request, token: str = Query(""), q: str = Query(""), po: str = Query(""), merged: str = Query(""), view: str = Query("client")):
     try:
         dept = _dept_for(request, token)
     except HTTPException:
@@ -189,6 +195,17 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
         tasks = [t for t in tasks if _matches(t, query)]
         done_today = [t for t in done_today if _matches(t, query)]
         archive = [t for t in archive if _matches(t, query)]
+    # Departments work in two tabs: client tasks (mail/WhatsApp) and
+    # internal tasks (assigned from the Team KRA / factory sheets).
+    # Admin keeps one combined view.
+    n_client = sum(1 for t in tasks if not _is_internal(t))
+    n_internal = sum(1 for t in tasks if _is_internal(t))
+    view = "internal" if view == "internal" else "client"
+    if dept != "admin":
+        want_internal = view == "internal"
+        tasks = [t for t in tasks if _is_internal(t) == want_internal]
+        done_today = [t for t in done_today if _is_internal(t) == want_internal]
+        archive = [t for t in archive if _is_internal(t) == want_internal]
     by_client: dict[str, list] = {}
     for t in tasks:
         by_client.setdefault(t["client"] or "Unknown", []).append(t)
@@ -212,6 +229,9 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
             "q": q.strip(),
             "po": po_filter,
             "merged": merged,
+            "view": view,
+            "n_client": n_client,
+            "n_internal": n_internal,
             "date_str": today.strftime("%A, %d %B %Y"),
             "by_client": by_client,
             "open_count": sum(1 for t in tasks if t["status"] == "open"),
@@ -319,11 +339,14 @@ async def task_schedule(request: Request, task_id: int, token: str = Query("")):
 
 @app.get("/calendar", response_class=HTMLResponse)
 async def calendar_page(request: Request, token: str = Query(""), date: str = Query("")):
-    """Day view: tasks scheduled for, created on, and completed on a date."""
+    """Day view: tasks scheduled for, created on, and completed on a date.
+    Admin only — department portals show just their own task list."""
     try:
         dept = _dept_for(request, token)
     except HTTPException:
         return RedirectResponse(url="/login", status_code=302)
+    if dept != "admin":
+        raise HTTPException(status_code=403, detail="admin access only")
     from datetime import timedelta
     from . import report
     tz = ZoneInfo(config.TIMEZONE)
@@ -517,11 +540,11 @@ async def order_update(request: Request, po_number: str, token: str = Query(""))
 
 
 def _production_access(request: Request, token: str) -> str:
-    """The Production page is internal-working: production, implementation,
-    management (view) and admin."""
+    """Production, Team and the hosted CXO dashboard are admin-only —
+    department portals show just their own task list."""
     dept = _dept_for(request, token)
-    if dept not in ("admin", "management", "implementation", "production"):
-        raise HTTPException(status_code=403, detail="no access to production")
+    if dept != "admin":
+        raise HTTPException(status_code=403, detail="admin access only")
     return dept
 
 

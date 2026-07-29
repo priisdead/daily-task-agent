@@ -55,6 +55,19 @@
   .stat.amber .n { color: var(--amber); }
   .scanline { font-size: 12px; color: var(--ink-3); margin: 10px 0 0; }
   .filter { display: flex; gap: 8px; margin: 18px 0 0; }
+  /* department work tabs: client vs internal */
+  .worktabs { display: flex; gap: 4px; margin: 24px 0 6px;
+    border-bottom: 2px solid var(--line); flex-wrap: wrap; }
+  .wtab { display: inline-flex; align-items: center; gap: 8px;
+    font: 600 14px/1 "Inter"; color: var(--ink-3); text-decoration: none;
+    padding: 11px 16px; border-bottom: 2px solid transparent;
+    margin-bottom: -2px; white-space: nowrap; }
+  .wtab:hover { color: var(--ink-2); }
+  .wtab.on { color: var(--accent); border-bottom-color: var(--accent); }
+  .wtab .wn { font-size: 12px; font-weight: 600; color: var(--ink-3);
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 100px; padding: 2px 9px; }
+  .wtab.on .wn { color: var(--accent); border-color: var(--accent); }
   .finput { flex: 1; font: 400 14px/1 "Inter"; color: var(--ink);
     background: var(--surface); border: 1px solid var(--line); border-radius: 100px;
     padding: 10px 18px; outline: none; }
@@ -175,11 +188,13 @@
     <span class="brand">Task Agent</span>
     <div class="actions">
       <a class="btn active" href="/?token={{ token }}">Tasks</a>
+      {% if dept == 'admin' %}
       <a class="btn" href="/calendar?token={{ token }}">Calendar</a>
+      {% endif %}
       {% if dept in ('admin', 'management', 'implementation') %}
       <a class="btn" href="/orders?token={{ token }}">Orders</a>
       {% endif %}
-      {% if dept in ('admin', 'management', 'implementation', 'production') %}
+      {% if dept == 'admin' %}
       <a class="btn" href="/production?token={{ token }}">Production</a>
       <a class="btn" href="/team?token={{ token }}">Team</a>
       {% endif %}
@@ -202,6 +217,16 @@
   <h1>Today{% if dept == 'qc' %} — QC{% elif dept != 'admin' %} — {{ dept|capitalize }}{% endif %}</h1>
   <div class="date">{{ date_str }}{% if dept == 'management' %} &middot; all departments, oversight view{% elif dept != 'admin' %} &middot; your department's tasks{% endif %}</div>
 
+  {% if dept != 'admin' %}
+  <div class="worktabs">
+    <a class="wtab {% if view != 'internal' %}on{% endif %}" href="/?token={{ token }}&view=client">Client tasks
+      <span class="wn">{{ n_client }}</span></a>
+    <a class="wtab {% if view == 'internal' %}on{% endif %}" href="/?token={{ token }}&view=internal">Internal tasks
+      <span class="wn">{{ n_internal }}</span></a>
+  </div>
+  <div class="scanline">{% if view == 'internal' %}Work assigned from the factory sheets — production stages and order tracking.{% else %}Asks that came in by email or WhatsApp.{% endif %}</div>
+  {% endif %}
+
   {% if po %}<div style="background:var(--accent);color:#fff;padding:10px 16px;border-radius:8px;font-weight:600;margin-top:20px;display:inline-block">PO {{ po }}</div>{% endif %}
 
   <div class="stats">
@@ -217,10 +242,11 @@
 
   <form method="get" action="/" class="filter">
     <input type="hidden" name="token" value="{{ token }}">
+    <input type="hidden" name="view" value="{{ view }}">
     <input class="finput" type="text" name="q" value="{{ q }}"
            placeholder="Filter by client, email, or keyword&hellip;">
     <button class="btn" type="submit">Filter</button>
-    {% if q or po %}<a class="btn" href="/?token={{ token }}">Clear</a>{% endif %}
+    {% if q or po %}<a class="btn" href="/?token={{ token }}&view={{ view }}">Clear</a>{% endif %}
   </form>
   {% if q %}<div class="scanline">Showing only tasks matching &ldquo;{{ q }}&rdquo;</div>{% endif %}
   {% if po %}<div class="scanline">Filtered to PO {{ po }} — <a href="/?token={{ token }}" style="color:var(--accent);text-decoration:underline">show all</a></div>{% endif %}
