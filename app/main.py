@@ -735,8 +735,15 @@ def _team_data(owner: str = ""):
     return rows, summary, sel, shown
 
 
+def _kra_marker(po: str, stage: str) -> str:
+    """Stable id for an assigned KRA stage task, used to prevent duplicates
+    and to show 'assigned' state on the Team page."""
+    slug = "".join(c for c in (stage or "").lower() if c.isalnum())[:40]
+    return f"[KRA:{po}:{slug}]"
+
+
 @app.get("/team", response_class=HTMLResponse)
-async def team_page(request: Request, token: str = Query(""), owner: str = Query("")):
+async def team_page(request: Request, token: str = Query(""), owner: str = Query(""), assigned: str = Query("")):
     """Team KRA view: who is sitting on which past-due stage, by how many
     days. ?owner=Name gives each person a bookmarkable personal view."""
     try:
@@ -746,6 +753,10 @@ async def team_page(request: Request, token: str = Query(""), owner: str = Query
             return RedirectResponse(url="/login", status_code=302)
         raise
     rows, summary, sel, shown = _team_data(owner)
+    # which rows are already assigned as real tasks?
+    open_reqs = " ".join((t.get("request") or "") for t in db.open_tasks())
+    for r in rows:
+        r["assigned"] = _kra_marker(r["po_number"], r["stage"]) in open_reqs
     buckets = {"b13": 0, "b47": 0, "b814": 0, "b15": 0}
     for r in rows:
         d = r["days_late"]
@@ -754,11 +765,56 @@ async def team_page(request: Request, token: str = Query(""), owner: str = Query
         request, "team.html",
         {"token": token, "dept": dept, "rows": rows, "summary": summary,
          "sel": sel, "shown": shown, "buckets": buckets,
+         "departments": config.DEPARTMENTS,
+         "assigned_msg": assigned,
          "pos_hit": len({r["po_number"] for r in rows}),
          "worst": max((r["days_late"] for r in rows), default=0),
          "configured": sheets.tracking_configured(),
          "last_sync": db.production_last_sync()},
     )
+
+
+@app.post("/team/assign")
+async def team_assign(request: Request, token: str = Query("")):
+    """Admin turns a past-due KRA stage into a real task on a department's
+    portal. Deduped by marker — assigning twice does nothing."""
+    if _dept_for(request, token) != "admin":
+        raise HTTPException(status_code=403, detail="admin only")
+    form = await request.form()
+    po = str(form.get("po", "")).strip().upper()
+    stage = str(form.get("stage", "")).strip()[:80]
+    owner_name = str(form.get("owner", "")).strip()[:60]
+    customer = str(form.get("customer", "")).strip()[:80]
+    due = str(form.get("due", "")).strip()[:10]
+    late = str(form.get("late", "")).strip()[:6]
+    department = str(form.get("department", "production")).lower().strip()
+    if department not in config.DEPARTMENTS:
+        department = "production"
+    back_owner = str(form.get("back_owner", "")).strip()
+    if not (po and stage):
+        raise HTTPException(status_code=400, detail="missing po/stage")
+    marker = _kra_marker(po, stage)
+    already = any(marker in (t.get("request") or "") for t in db.open_tasks())
+    if not already:
+        user = _session_user(request)
+        db.add_task({
+            "client": customer or "Production",
+            "channel": "sheet",
+            "request": (f"{marker} {stage} for {po}"
+                        + (f" — {owner_name}" if owner_name else "")
+                        + (f", due {due}" if due else "")
+                        + (f", {late} days late" if late else "")),
+            "department": department,
+            "po_number": po,
+            "deadline": due,
+            "priority": "high",
+            "source": f"assigned from Team page by {(user or {}).get('email', 'admin')}",
+        })
+    from urllib.parse import quote
+    back = f"/team?token={token}&assigned={'dup' if already else '1'}"
+    if back_owner:
+        back += f"&owner={quote(back_owner)}"
+    return RedirectResponse(url=back, status_code=303)
 
 
 @app.get("/team.pdf")

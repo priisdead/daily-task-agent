@@ -93,6 +93,12 @@
   <div class="allclear">&#10003; Nothing is past due — every stage is inside its SLA.</div>
   {% else %}
 
+  {% if assigned_msg == '1' %}
+  <div class="allclear" style="margin-top:16px">&#10003; Task assigned — it now shows on that department's portal.</div>
+  {% elif assigned_msg == 'dup' %}
+  <div class="none" style="color:var(--amber);font-weight:600">Already assigned — an open task for this stage exists.</div>
+  {% endif %}
+
   <div class="verdict">
     <span class="bad">{{ rows|length }} task{{ '' if rows|length == 1 else 's' }} past due</span>
     <span style="color:var(--ink-3);font-weight:400">across {{ pos_hit }} PO{{ '' if pos_hit == 1 else 's' }} &middot; worst {{ worst }}d</span>
@@ -132,7 +138,7 @@
   <div class="tblwrap">
   <table>
     <tr><th>Stage</th>{% if not sel %}<th>Owner</th>{% endif %}<th>PO</th><th>Customer</th>
-        <th>Due</th><th class="num">Late by</th></tr>
+        <th>Due</th><th class="num">Late by</th>{% if dept == 'admin' %}<th>Assign</th>{% endif %}</tr>
     {% for r in shown %}
     <tr>
       <td><b>{{ r.stage }}</b></td>
@@ -141,9 +147,35 @@
       <td class="muted">{{ r.customer or '—' }}</td>
       <td class="muted">{{ r.due }}</td>
       <td class="num"><span class="late">{{ r.days_late }}d</span></td>
+      {% if dept == 'admin' %}
+      <td>
+        {% if r.assigned %}
+        <span class="chip" style="color:var(--accent);border-color:var(--accent)">&#10003; assigned</span>
+        {% else %}
+        <form method="post" action="/team/assign?token={{ token }}"
+              style="display:flex;gap:6px;align-items:center;margin:0">
+          <input type="hidden" name="po" value="{{ r.po_number }}">
+          <input type="hidden" name="stage" value="{{ r.stage }}">
+          <input type="hidden" name="owner" value="{{ r.owner }}">
+          <input type="hidden" name="customer" value="{{ r.customer }}">
+          <input type="hidden" name="due" value="{{ r.due }}">
+          <input type="hidden" name="late" value="{{ r.days_late }}">
+          <input type="hidden" name="back_owner" value="{{ sel }}">
+          <select name="department" style="font:500 12px/1 'Inter';color:var(--ink-2);
+                  background:var(--surface);border:1px solid var(--line);
+                  border-radius:100px;padding:6px 8px">
+            {% for d in departments %}
+            <option value="{{ d }}" {% if d == 'production' %}selected{% endif %}>{{ 'QC' if d == 'qc' else d|capitalize }}</option>
+            {% endfor %}
+          </select>
+          <button class="btn" type="submit" style="padding:7px 12px">Assign</button>
+        </form>
+        {% endif %}
+      </td>
+      {% endif %}
     </tr>
     {% else %}
-    <tr><td colspan="6" class="none">Nothing past due for this person.</td></tr>
+    <tr><td colspan="7" class="none">Nothing past due for this person.</td></tr>
     {% endfor %}
   </table>
   </div>
