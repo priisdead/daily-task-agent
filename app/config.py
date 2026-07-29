@@ -119,6 +119,13 @@ SHEET_RISK_DAYS = int(os.getenv("SHEET_RISK_DAYS", "2"))
 SHEET_RISK_MIN_PENDING = int(os.getenv("SHEET_RISK_MIN_PENDING", "100"))
 SHEET_RISK_LOOKBACK_DAYS = int(os.getenv("SHEET_RISK_LOOKBACK_DAYS", "7"))
 
+# ── Stage-tracking sheet sync (Dragpal ji's 26-stage tracking sheet).
+# Uses the same SHEETS_API_KEY. Empty TRACK_SHEET_ID = off.
+TRACK_SHEET_ID = os.getenv("TRACK_SHEET_ID", "")
+TRACK_SHEET_TAB = os.getenv("TRACK_SHEET_TAB", "Sheet1")
+# Raise a task when an order shows ZERO progress this many days after PO date
+TRACK_NOT_STARTED_DAYS = int(os.getenv("TRACK_NOT_STARTED_DAYS", "3"))
+
 # ── Email login (RBAC) ───────────────────────────────────────────────────────
 # Signs session cookies; set to a long random string in production.
 SECRET_KEY = os.getenv("SECRET_KEY", "")

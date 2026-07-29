@@ -165,6 +165,152 @@ def sync_production() -> dict:
         return {"synced": 0, "error": str(exc)[:200]}
 
 
+# ── stage-tracking sheet (Dragpal ji's 26-stage sheet) ──────────────────────
+
+_DONE_WORDS = ("true", "completed", "complete", "done", "delivered", "yes", "ok")
+_SKIP_STAGE_COLS = ("final remarks",)  # free-text, not a checkbox stage
+
+
+def _stage_done(v) -> bool:
+    return _norm(v) in _DONE_WORDS
+
+
+def tracking_configured() -> bool:
+    return bool(config.SHEETS_API_KEY and config.TRACK_SHEET_ID)
+
+
+def rows_to_tracking(values: list) -> list:
+    """Two header rows: row 1 = stage owner (forward-filled), row 2 = stage
+    name. Rows 3+ = one PO per row, stages TRUE/Completed/Delivered as done."""
+    if len(values) < 3:
+        return []
+    import json as _json
+    owners_raw = values[0]
+    headers = [str(h or "").strip() for h in values[1]]
+    # forward-fill the owner row (merged cells arrive blank)
+    owners, last = [], ""
+    for i in range(len(headers)):
+        o = str(owners_raw[i]).strip() if i < len(owners_raw) else ""
+        if o:
+            last = o
+        owners.append(last)
+
+    def h(name):
+        n = _norm(name)
+        for i, hd in enumerate(headers):
+            if _norm(hd) == n:
+                return i
+        return -1
+
+    i_ref, i_cust = h("customer ref #"), h("customer name")
+    i_pod, i_crd = h("po date"), h("cargo ready date")
+    i_closed = h("final po closed")
+    fixed = {i_ref, i_cust, i_pod, i_crd}
+    stage_idx = [i for i, hd in enumerate(headers)
+                 if i not in fixed and hd
+                 and _norm(hd) not in _SKIP_STAGE_COLS]
+
+    out = []
+    for row in values[2:]:
+        def cell(i):
+            return row[i] if 0 <= i < len(row) else ""
+        po = str(cell(i_ref)).strip()
+        if not po:
+            continue
+        stages = [{"stage": headers[i], "owner": owners[i],
+                   "done": _stage_done(cell(i))} for i in stage_idx]
+        done_n = sum(1 for s in stages if s["done"])
+        pending = [s for s in stages if not s["done"]]
+        closed = _stage_done(cell(i_closed)) if i_closed >= 0 else False
+        if closed or not pending:
+            status = "closed"
+        elif done_n == 0:
+            status = "not_started"
+        else:
+            status = "in_progress"
+        out.append({
+            "po_number": po.upper(),
+            "customer": str(cell(i_cust)).strip(),
+            "po_date": parse_date(cell(i_pod)),
+            "cargo_ready": parse_date(cell(i_crd)),
+            "stages_json": _json.dumps(stages),
+            "stages_done": done_n,
+            "stages_total": len(stages),
+            "current_stage": pending[0]["stage"] if pending else "",
+            "current_owner": pending[0]["owner"] if pending else "",
+            "track_status": status,
+        })
+    return out
+
+
+def sync_tracking() -> dict:
+    """Pull the stage-tracking sheet, store it, raise tasks for stuck orders."""
+    if not tracking_configured():
+        return {"synced": 0, "skipped": "not configured"}
+    try:
+        values = fetch_values(config.TRACK_SHEET_ID, config.TRACK_SHEET_TAB,
+                              config.SHEETS_API_KEY)
+        records = rows_to_tracking(values)
+        db.replace_tracking_rows(records)
+        risks = _raise_tracking_tasks(records)
+        log.info("tracking sync: %d rows, %d stuck-order tasks", len(records), risks)
+        return {"synced": len(records), "risk_tasks": risks}
+    except Exception as exc:
+        log.exception("tracking sheet sync failed")
+        db.log_event("error", "sheets", f"tracking sheet sync failed: {exc}")
+        return {"synced": 0, "error": str(exc)[:200]}
+
+
+def _raise_tracking_tasks(records: list) -> int:
+    """Two situations create an implementation task (one open task per PO):
+    1. NOT STARTED: zero stages done N days after the PO date.
+    2. STUCK PAST CRD: cargo-ready date passed but the order isn't closed —
+       task names the pending stage and the person who owns it."""
+    today = datetime.now(ZoneInfo(config.TIMEZONE)).date()
+    open_reqs = " ".join((t.get("request") or "") for t in db.open_tasks())
+    raised = 0
+    for r in records:
+        if r["track_status"] == "closed":
+            continue
+        marker = f"[TRK:{r['po_number']}]"
+        if marker in open_reqs:
+            continue
+        reason = ""
+        if r["track_status"] == "not_started" and r["po_date"]:
+            try:
+                age = (today - date.fromisoformat(r["po_date"])).days
+            except ValueError:
+                age = 0
+            if age >= config.TRACK_NOT_STARTED_DAYS:
+                reason = (f"no stage started yet, PO is {age} days old "
+                          f"(PO date {r['po_date']})")
+        elif r["cargo_ready"]:
+            try:
+                overdue = (today - date.fromisoformat(r["cargo_ready"])).days
+            except ValueError:
+                overdue = 0
+            if overdue > 0:
+                reason = (f"cargo-ready date {r['cargo_ready']} passed "
+                          f"{overdue} day{'s' if overdue != 1 else ''} ago, "
+                          f"stuck at '{r['current_stage']}'"
+                          + (f" ({r['current_owner']})" if r['current_owner'] else "")
+                          + f" — {r['stages_done']}/{r['stages_total']} stages done")
+        if not reason:
+            continue
+        db.add_task({
+            "client": r["customer"] or "Production",
+            "channel": "sheet",
+            "request": (f"Tracking sheet {marker} {r['po_number']}: {reason}"),
+            "department": "implementation",
+            "po_number": r["po_number"],
+            "deadline": r["cargo_ready"],
+            "priority": "high",
+            "source": "stage tracking sheet sync",
+        })
+        raised += 1
+    return raised
+
+
 def _raise_risk_tasks(records: list) -> int:
     """A line is AT RISK when production is still pending and the ship-ready
     date is within RISK_DAYS (or already past). One open task per line."""

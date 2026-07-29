@@ -111,6 +111,21 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     updated_at  TEXT
 );
 
+CREATE TABLE IF NOT EXISTS tracking_rows (
+    id            {_ID},
+    po_number     TEXT,
+    customer      TEXT,
+    po_date       TEXT,
+    cargo_ready   TEXT,
+    stages_json   TEXT,
+    stages_done   INTEGER DEFAULT 0,
+    stages_total  INTEGER DEFAULT 0,
+    current_stage TEXT,
+    current_owner TEXT,
+    track_status  TEXT,
+    synced_at     TEXT
+);
+
 CREATE TABLE IF NOT EXISTS users (
     id          {_ID},
     email       TEXT UNIQUE,
@@ -315,6 +330,40 @@ def production_for_po(po_number: str) -> list:
         return _rows(db.execute(
             _q("SELECT * FROM production_rows WHERE po_number = ?"
                " ORDER BY uid"), (po_number.strip().upper(),)))
+
+
+def replace_tracking_rows(records: list) -> None:
+    """The stage-tracking sheet is the source of truth — replace wholesale,
+    bulk insert on one connection (same pattern as production_rows)."""
+    now = utcnow()
+    rows = [(r["po_number"], r["customer"], r["po_date"], r["cargo_ready"],
+             r["stages_json"], r["stages_done"], r["stages_total"],
+             r["current_stage"], r["current_owner"], r["track_status"], now)
+            for r in records]
+    sql = _q("INSERT INTO tracking_rows (po_number, customer, po_date,"
+             " cargo_ready, stages_json, stages_done, stages_total,"
+             " current_stage, current_owner, track_status, synced_at)"
+             " VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+    with get_db() as db:
+        db.execute("DELETE FROM tracking_rows")
+        if not rows:
+            return
+        cur = db.cursor() if IS_PG else db
+        cur.executemany(sql, rows)
+
+
+def tracking_all() -> list:
+    with get_db() as db:
+        return _rows(db.execute(
+            "SELECT * FROM tracking_rows ORDER BY po_date, po_number"))
+
+
+def tracking_for_po(po_number: str) -> dict | None:
+    with get_db() as db:
+        rows = _rows(db.execute(
+            _q("SELECT * FROM tracking_rows WHERE UPPER(po_number) = ?"),
+            ((po_number or "").strip().upper(),)))
+        return rows[0] if rows else None
 
 
 def production_all() -> list:

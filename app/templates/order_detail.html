@@ -104,6 +104,26 @@
   {% endfor %}
   {% endif %}
 
+  {% if tracking %}
+  <h2>Stage tracking &middot; {{ tracking.stages_done }}/{{ tracking.stages_total }} stages done
+    {% if tracking.track_status == 'closed' %} &middot; <span style="color:var(--accent)">closed</span>
+    {% elif tracking.track_status == 'not_started' %} &middot; <span style="color:var(--red)">not started</span>
+    {% elif tracking.current_stage %} &middot; now at: {{ tracking.current_stage }}{% if tracking.current_owner %} ({{ tracking.current_owner }}){% endif %}
+    {% endif %}</h2>
+  <div style="height:6px;background:var(--line);border-radius:100px;max-width:420px;margin:8px 0 14px;overflow:hidden">
+    <div style="height:100%;border-radius:100px;background:var(--accent);width:{{ (100 * tracking.stages_done / tracking.stages_total)|round|int if tracking.stages_total else 0 }}%"></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:4px 18px;margin-bottom:8px">
+    {% for s in stages %}
+    <div style="display:flex;gap:8px;align-items:baseline;font-size:13px;padding:3px 0">
+      <span style="flex:none;{% if s.done %}color:var(--accent){% else %}color:var(--ink-3){% endif %}">{{ '&#10003;'|safe if s.done else '&#9675;'|safe }}</span>
+      <span style="{% if s.done %}color:var(--ink-3){% endif %}">{{ s.stage }}
+        {% if s.owner %}<span style="color:var(--ink-3);font-size:11.5px">&middot; {{ s.owner }}</span>{% endif %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <h2>Tasks on this order &middot; {{ tasks|length }}</h2>
   {% for t in tasks %}
   <div class="row">

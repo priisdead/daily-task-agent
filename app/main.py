@@ -64,6 +64,15 @@ async def lifespan(app: FastAPI):
             max_instances=1,
             coalesce=True,
         )
+    if sheets.tracking_configured():
+        scheduler.add_job(
+            sheets.sync_tracking,
+            IntervalTrigger(minutes=config.SHEET_SYNC_MINUTES),
+            id="tracking_sync",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
     scheduler.start()
     log.info(
         "Scheduler started: scanning every %d minutes, digest daily at %02d:00 (%s)%s",
@@ -472,12 +481,21 @@ async def order_detail(request: Request, po_number: str, token: str = Query(""))
     po = db.get_po(po_number)
     if not po:
         raise HTTPException(status_code=404, detail="unknown PO")
+    tracking = db.tracking_for_po(po_number)
+    stages = []
+    if tracking:
+        import json as _json
+        try:
+            stages = _json.loads(tracking.get("stages_json") or "[]")
+        except ValueError:
+            stages = []
     return templates.TemplateResponse(
         request, "order_detail.html",
         {"token": token, "dept": dept, "po": po,
          "statuses": config.PO_STATUSES,
          "tasks": db.tasks_for_po(po_number),
          "production": db.production_for_po(po_number),
+         "tracking": tracking, "stages": stages,
          "mails": db.emails_mentioning(po["po_number"], limit=50)},
     )
 
@@ -707,9 +725,13 @@ async def sync_sheets_now(request: Request, token: str = Query(""), back: int = 
     if back:
         # fire-and-forget: the button returns instantly, sync runs behind
         asyncio.get_running_loop().run_in_executor(None, sheets.sync_production)
+        if sheets.tracking_configured():
+            asyncio.get_running_loop().run_in_executor(None, sheets.sync_tracking)
         return RedirectResponse(url=f"/production?token={token}", status_code=303)
     result = await asyncio.to_thread(sheets.sync_production)
-    return PlainTextResponse(f"Sync result: {result}")
+    tracking = (await asyncio.to_thread(sheets.sync_tracking)
+                if sheets.tracking_configured() else {"skipped": "not configured"})
+    return PlainTextResponse(f"Sync result: {result}\nTracking sheet: {tracking}")
 
 
 @app.get("/backup")
