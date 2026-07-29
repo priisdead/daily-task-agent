@@ -89,9 +89,12 @@
     h1 { font-size:26px; margin-top:22px; }
     .actions { width:100%; overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; }
     .btn { padding:10px 14px; font-size:12.5px; white-space:nowrap; min-height:40px; }
-    .line { flex-wrap:wrap; }
-    .side { text-align:left; min-width:0; }
-    .links { justify-content:flex-start; }
+    .line { flex-wrap:wrap; gap:6px 12px; padding-right:4px; }
+    .line .grow { flex:1 1 100%; }          /* text gets the full width… */
+    .side { flex:1 1 100%; text-align:left; min-width:0;
+      display:flex; align-items:center; gap:12px; flex-wrap:wrap; }  /* …status wraps below */
+    .side .pct { margin-top:0; }
+    .links { justify-content:flex-start; margin-top:0; margin-left:auto; }
   }
 </style>
 </head>

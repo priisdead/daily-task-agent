@@ -60,8 +60,23 @@
     h1 { font-size:26px; margin-top:22px; }
     .actions { width:100%; overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; }
     .btn { padding:10px 14px; font-size:12.5px; white-space:nowrap; min-height:40px; }
-    .tblwrap { overflow-x:auto; }
-    table { min-width:560px; }
+    /* tables become stacked cards — no sideways scrolling on a phone */
+    .tblwrap { overflow:visible; }
+    table { min-width:0; display:block; }
+    thead, tr:first-child { display:none; }   /* header row (no thead tag) */
+    tbody, tr { display:block; }
+    tr { border-bottom:1px solid var(--line); padding:12px 0 10px; }
+    tr:last-child { border-bottom:none; }
+    td { display:flex; justify-content:space-between; align-items:baseline;
+      gap:14px; border:none; padding:3px 0; text-align:right; }
+    td::before { content:attr(data-l); color:var(--ink-3); font-size:11px;
+      letter-spacing:.06em; text-transform:uppercase; font-weight:600;
+      text-align:left; flex:none; }
+    td:not([data-l]) { display:block; text-align:left; }
+    td.cmain { display:block; text-align:left; font-size:14.5px; margin-bottom:4px; }
+    td.cmain::before { content:none; }
+    td .bar { max-width:none !important; }
+    .none, tr td[colspan] { display:block; text-align:left; }
   }
 </style>
 </head>
@@ -118,15 +133,15 @@
         <th class="num">Worst</th><th class="num">Avg</th><th>Oldest pending task</th></tr>
     {% for s in summary %}
     <tr>
-      <td>
+      <td class="cmain">
         <a class="owner" href="/team?token={{ token }}&owner={{ s.owner|urlencode }}">{{ s.owner }}</a>
         <div class="bar" style="max-width:140px"><i style="width:{{ (100 * s.n / rows|length)|round|int }}%"></i></div>
       </td>
-      <td class="num"><b>{{ s.n }}</b></td>
-      <td class="num">{{ s.pos }}</td>
-      <td class="num"><span class="late">{{ s.worst }}d</span></td>
-      <td class="num">{{ s.avg }}d</td>
-      <td class="muted">{{ s.oldest.po_number }} &middot; {{ s.oldest.stage }}</td>
+      <td class="num" data-l="Past due"><b>{{ s.n }}</b></td>
+      <td class="num" data-l="POs hit">{{ s.pos }}</td>
+      <td class="num" data-l="Worst"><span class="late">{{ s.worst }}d</span></td>
+      <td class="num" data-l="Avg">{{ s.avg }}d</td>
+      <td class="muted" data-l="Oldest pending">{{ s.oldest.po_number }} &middot; {{ s.oldest.stage }}</td>
     </tr>
     {% endfor %}
   </table>
@@ -141,14 +156,14 @@
         <th>Due</th><th class="num">Late by</th>{% if dept == 'admin' %}<th>Assign</th>{% endif %}</tr>
     {% for r in shown %}
     <tr>
-      <td><b>{{ r.stage }}</b></td>
-      {% if not sel %}<td>{{ r.owner }}</td>{% endif %}
-      <td>{% if dept in ('admin','management','implementation') %}<a class="owner" href="/orders/{{ r.po_number }}?token={{ token }}">{{ r.po_number }}</a>{% else %}{{ r.po_number }}{% endif %}</td>
-      <td class="muted">{{ r.customer or '—' }}</td>
-      <td class="muted">{{ r.due }}</td>
-      <td class="num"><span class="late">{{ r.days_late }}d</span></td>
+      <td class="cmain"><b>{{ r.stage }}</b></td>
+      {% if not sel %}<td data-l="Owner">{{ r.owner }}</td>{% endif %}
+      <td data-l="PO">{% if dept in ('admin','management','implementation') %}<a class="owner" href="/orders/{{ r.po_number }}?token={{ token }}">{{ r.po_number }}</a>{% else %}{{ r.po_number }}{% endif %}</td>
+      <td class="muted" data-l="Customer">{{ r.customer or '—' }}</td>
+      <td class="muted" data-l="Due">{{ r.due }}</td>
+      <td class="num" data-l="Late by"><span class="late">{{ r.days_late }}d</span></td>
       {% if dept == 'admin' %}
-      <td>
+      <td data-l="Assign">
         {% if r.assigned %}
         <span class="chip" style="color:var(--accent);border-color:var(--accent)">&#10003; assigned</span>
         {% else %}
