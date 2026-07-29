@@ -638,10 +638,28 @@ async def insights_page(request: Request, token: str = Query("")):
             po_counts[p["status"]] += 1
     po_total = sum(po_counts.values()) or 1
 
+    # Who is holding the most overdue factory stages (Team KRA sheet)
+    kra_by_owner: dict[str, dict] = {}
+    for r in sheets.team_pastdue():
+        o = kra_by_owner.setdefault(
+            r["owner"], {"owner": r["owner"], "n": 0, "worst": 0, "pos": set()})
+        o["n"] += 1
+        o["worst"] = max(o["worst"], r["days_late"])
+        o["pos"].add(r["po_number"])
+    kra_rows = sorted(kra_by_owner.values(), key=lambda o: (-o["n"], -o["worst"]))
+    for o in kra_rows:
+        o["pos"] = len(o["pos"])
+    kra_total = sum(o["n"] for o in kra_rows)
+    kra_shown = kra_rows[:12]
+    kra_hidden = len(kra_rows) - len(kra_shown)   # never truncate silently
+    kra_max = max([o["n"] for o in kra_shown] or [1])
+
     return templates.TemplateResponse(
         request, "insights.html",
         {"token": token, "dept": dept, "prod": prod, "prod_total": prod_total,
          "dept_rows": dept_rows, "dept_max": dept_max,
+         "kra_rows": kra_shown, "kra_max": kra_max, "kra_total": kra_total,
+         "kra_hidden": kra_hidden, "kra_people": len(kra_rows),
          "line_created": line_created, "line_completed": line_completed,
          "poly_created": " ".join(f"{p['x']},{p['y']}" for p in line_created),
          "poly_completed": " ".join(f"{p['x']},{p['y']}" for p in line_completed),

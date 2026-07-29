@@ -71,6 +71,11 @@
   .hbar .rowb:hover .bar { opacity:.85; }
   .hbar .val { font-size:12px; color:var(--text-primary); font-weight:600;
     font-variant-numeric:tabular-nums; }
+  .hbar .sfx { font-size:11.5px; color:var(--muted); white-space:nowrap;
+    font-variant-numeric:tabular-nums; }
+  .hbar .lbl a:hover { text-decoration:underline !important; }
+  /* people names need more room than department words */
+  .hbar.people .lbl { width:180px; line-height:1.35; }
 
   .stack { display:flex; height:22px; border-radius:5px; overflow:hidden;
     gap:2px; margin-top:14px; background:var(--surface-1); }
@@ -95,6 +100,8 @@
     .actions { width:100%; overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; }
     .btn { white-space:nowrap; min-height:40px; }
     .hbar .lbl { width:86px; }
+    .hbar.people .lbl { width:112px; font-size:12px; }
+    .hbar.people .sfx { display:none; }
   }
 </style>
 </head>
@@ -189,6 +196,30 @@
         <tr><td>{{ p.label }}</td><td>{{ p.v }}</td><td>{{ line_completed[loop.index0].v }}</td></tr>
         {% endfor %}</table>
       </details>
+    </div>
+
+    <div class="card">
+      <h2>Overdue factory stages by person</h2>
+      <div class="note">{% if kra_total %}{{ kra_total }} past-due stage{{ '' if kra_total == 1 else 's' }}
+        across {{ kra_people }} owner{{ '' if kra_people == 1 else 's' }} &middot; most first &middot;
+        click a name to open their list{% if kra_hidden %} &middot; showing top 12,
+        {{ kra_hidden }} more not shown{% endif %}{% else %}from the Team KRA tracking sheet{% endif %}</div>
+      <div class="hbar people">
+        {% for o in kra_rows %}
+        <div class="rowb" title="{{ o.owner }} — {{ o.n }} past-due stage{{ '' if o.n == 1 else 's' }} across {{ o.pos }} PO{{ '' if o.pos == 1 else 's' }}, worst {{ o.worst }} days late">
+          <span class="lbl"><a href="/team?token={{ token }}&owner={{ o.owner|urlencode }}"
+             style="color:inherit;text-decoration:none">{{ o.owner }}</a></span>
+          <span class="track">
+            <span class="bar" style="width:{{ (100 * o.n / kra_max) | round(1) }}%;background:var(--seq-450)"></span>
+            <span class="val">{{ o.n }}</span>
+            <span class="sfx">worst {{ o.worst }}d</span>
+          </span>
+        </div>
+        {% else %}
+        <div class="note">Nothing past due — every stage is inside its SLA
+          (or the tracking sheet isn't connected yet).</div>
+        {% endfor %}
+      </div>
     </div>
 
     <div class="card">
