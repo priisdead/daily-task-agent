@@ -128,7 +128,7 @@
   {% for t in tasks %}
   <div class="row">
     <div class="grow">
-      <div class="req {{ 'done' if t.status == 'done' }}">{{ t.request }}</div>
+      <div class="req {{ 'done' if t.status == 'done' }}">{{ t.request|clean }}</div>
       <div class="meta">{{ t.department or '—' }}{% if t.deadline %} &middot; due {{ t.deadline }}{% endif %}</div>
       {% if t.remark %}<div class="remark">Remark: {{ t.remark }}{% if t.done_by %} &middot; {{ t.done_by }}{% endif %}</div>{% endif %}
     </div>

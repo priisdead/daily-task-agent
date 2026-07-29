@@ -1,6 +1,7 @@
 """FastAPI app: Meta webhook + daily scheduler + task dashboard."""
 import asyncio
 import logging
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,17 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 log = logging.getLogger("main")
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+# Internal dedup markers ([KRA:...], [TRK:...]) are plumbing, not something
+# a person should read — strip them wherever a task is displayed.
+_MARKER_RE = re.compile(r"\[(?:KRA|TRK):[^\]]*\]\s*")
+
+
+def _clean_request(text) -> str:
+    return _MARKER_RE.sub("", str(text or "")).strip()
+
+
+templates.env.filters["clean"] = _clean_request
 scheduler = BackgroundScheduler(timezone=config.TIMEZONE)
 
 

@@ -85,7 +85,7 @@
   {% for t in scheduled %}
   <div class="task {{ 'high' if t.priority == 'high' }} {{ 'done-t' if t.status == 'done' }}">
     <div class="grow">
-      <div class="req">{{ t.request }}</div>
+      <div class="req">{{ t.request|clean }}</div>
       <div class="meta">{{ t.client }} &middot; {{ t.department or '—' }}{% if t.deadline %} &middot; due {{ t.deadline }}{% endif %}</div>
     </div>
     <span class="pill {{ t.status }}">{{ t.status.replace('_',' ') }}</span>
@@ -96,7 +96,7 @@
   {% for t in created %}
   <div class="task {{ 'high' if t.priority == 'high' }} {{ 'done-t' if t.status == 'done' }}">
     <div class="grow">
-      <div class="req">{{ t.request }}</div>
+      <div class="req">{{ t.request|clean }}</div>
       <div class="meta">{{ t.client }} &middot; {{ t.department or '—' }}</div>
     </div>
     <span class="pill {{ t.status }}">{{ t.status.replace('_',' ') }}</span>
@@ -107,7 +107,7 @@
   {% for t in completed %}
   <div class="task done-t">
     <div class="grow">
-      <div class="req">{{ t.request }}</div>
+      <div class="req">{{ t.request|clean }}</div>
       <div class="meta">{{ t.client }} &middot; {{ t.department or '—' }}</div>
       {% if t.remark %}<div class="remark">Remark: {{ t.remark }}{% if t.done_by %} &middot; {{ t.done_by }}{% endif %}</div>{% endif %}
     </div>

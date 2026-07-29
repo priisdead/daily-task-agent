@@ -25,16 +25,17 @@
   body { background: var(--bg); color: var(--ink);
     font: 400 15px/1.6 "Inter", -apple-system, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased; }
-  .wrap { max-width: 720px; margin: 0 auto; padding: 0 20px 80px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px 80px; }
 
   .topbar { display: flex; justify-content: space-between; align-items: center;
-    padding: 26px 0 0; }
+    padding: 26px 0 0; gap: 12px; flex-wrap: wrap; }
   .brand { font: 600 13px/1 "Inter"; letter-spacing: .14em; text-transform: uppercase;
     color: var(--ink-3); }
-  .actions { display: flex; gap: 8px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .btn { font: 500 13px/1 "Inter"; color: var(--ink-2); background: none;
     border: 1px solid var(--line); border-radius: 100px; padding: 9px 16px;
-    cursor: pointer; text-decoration: none; transition: all .15s; }
+    cursor: pointer; text-decoration: none; transition: all .15s;
+    white-space: nowrap; }
   .btn:hover { border-color: var(--ink-3); color: var(--ink); }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn.primary:hover { opacity: .9; }
@@ -93,9 +94,14 @@
   .badge.amber { color: var(--amber); border: 1px solid var(--amber); }
   details.folder > .fbody { padding: 0 0 8px 22px; }
 
-  .task { display: flex; align-items: flex-start; gap: 14px;
-    padding: 12px 0 12px 12px; border-bottom: 1px solid var(--line);
+  /* task row: text uses the full width, controls sit on their own line */
+  .task { display: flex; flex-direction: column; gap: 10px;
+    padding: 14px 14px 14px 14px; border-bottom: 1px solid var(--line);
     border-left: 3px solid var(--accent); margin: 6px 0; }
+  .tasktop { display: flex; align-items: flex-start; gap: 14px; }
+  .taskbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .taskbar form { margin: 0; }
+  .taskbar .doneform { margin-left: auto; }
   .task:last-child { border-bottom: none; }
   .task.high { border-left-color: var(--red); background:
     color-mix(in srgb, var(--red) 4%, transparent); }
@@ -140,7 +146,9 @@
   .remark { font-size: 13px; color: var(--accent); margin-top: 5px; }
   .remark b { font-weight: 600; }
   .grow { flex: 1; min-width: 0; }
-  .req { font-weight: 500; }
+  .req { font-weight: 500; line-height: 1.5; }
+  .doneform { flex: 1; min-width: 220px; max-width: 460px; }
+  .doneform input { flex: 1; }
   .meta { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
   .meta b { color: var(--ink); font-weight: 600; }
   .tag { font-size: 12px; color: var(--ink-3); }
@@ -169,10 +177,12 @@
     .stat .n { font-size: 22px; }
     .finput, .newtask input, .newtask select, .doneform input,
     .report-box input[type=date] { font-size: 16px; }  /* stops iOS zoom */
-    .task { flex-wrap: wrap; gap: 8px 10px; }
+    .task { padding: 12px 10px; gap: 8px; }
+    .tasktop { flex-wrap: wrap; gap: 8px; }
     .task .grow { flex: 1 1 100%; }
-    .task form, .task .due, .task .assign { align-self: center; }
-    .doneform { width: 100%; }
+    .taskbar { gap: 8px; }
+    .taskbar .doneform { margin-left: 0; width: 100%; max-width: none; }
+    .doneform input { width: 100%; }
     .doneform input { flex: 1; width: auto; }
     .assign select, .btn { min-height: 40px; }         /* touch targets */
     .admin-tools { flex-direction: column; }
@@ -305,44 +315,48 @@
       <div class="fbody">
       {% for t in tasks %}
         <div class="task{% if t.priority == 'high' %} high{% elif t.status == 'in_progress' %} progress-edge{% endif %}">
-          <div class="grow">
-            <div class="req">{{ t.request }}</div>
-            <div class="meta">
-              <span class="tag">{{ t.channel }}</span>
-              {% if t.po_number %} &middot; {% if dept in ('admin', 'management', 'implementation') %}<a class="tag" style="color:var(--accent);text-decoration:none;font-weight:600" href="/orders/{{ t.po_number }}?token={{ token }}">{{ t.po_number }}</a>{% else %}<span class="tag">{{ t.po_number }}</span>{% endif %}{% endif %}
-              {% if dept in ('admin', 'management') and t.department %} &middot; <span class="tag">{{ t.department }}</span>{% endif %}
-              {% if t.status == 'in_progress' %} &middot; <span class="tag progress">in progress</span>{% endif %}
-              {% if t.priority == 'high' %} &middot; <span class="tag high">high priority</span>{% endif %}
+          <div class="tasktop">
+            <div class="grow">
+              <div class="req">{{ t.request|clean }}</div>
+              <div class="meta">
+                <span class="tag">{{ t.channel }}</span>
+                {% if t.po_number %} &middot; {% if dept in ('admin', 'management', 'implementation') %}<a class="tag" style="color:var(--accent);text-decoration:none;font-weight:600" href="/orders/{{ t.po_number }}?token={{ token }}">{{ t.po_number }}</a>{% else %}<span class="tag">{{ t.po_number }}</span>{% endif %}{% endif %}
+                {% if dept in ('admin', 'management') and t.department %} &middot; <span class="tag">{{ t.department }}</span>{% endif %}
+                {% if t.status == 'in_progress' %} &middot; <span class="tag progress">in progress</span>{% endif %}
+                {% if t.priority == 'high' %} &middot; <span class="tag high">high priority</span>{% endif %}
+              </div>
+              {% if t.source %}<div class="src">&ldquo;{{ t.source }}&rdquo;</div>{% endif %}
             </div>
-            {% if t.source %}<div class="src">&ldquo;{{ t.source }}&rdquo;</div>{% endif %}
+            {% if t.deadline %}<span class="due">Due {{ t.deadline }}</span>{% endif %}
           </div>
-          {% if t.deadline %}<span class="due">Due {{ t.deadline }}</span>{% endif %}
-          <form class="sched" method="post" action="/tasks/{{ t.id }}/schedule?token={{ token }}"
-                title="Schedule this task for a date">
-            <input type="date" name="date" value="{{ t.scheduled_for }}"
-                   onchange="this.form.submit()">
-          </form>
-          {% if dept == 'admin' %}
-          <form class="assign" method="post" action="/tasks/{{ t.id }}/assign?token={{ token }}">
-            <select name="department" onchange="this.form.submit()"
-                    title="Assign to department">
-              {% if not t.department %}<option value="" selected>assign&hellip;</option>{% endif %}
-              {% for d in departments %}
-              <option value="{{ d }}" {% if t.department == d %}selected{% endif %}>{{ 'QC' if d == 'qc' else d|capitalize }}</option>
-              {% endfor %}
-            </select>
-          </form>
-          {% endif %}
-          {% if dept in ('admin', 'management') %}
-          <form method="post" action="/tasks/{{ t.id }}/done?token={{ token }}">
-            <button class="btn" type="submit">Done</button>
-          </form>
-          {% else %}
-          <form class="doneform" method="post" action="/tasks/{{ t.id }}/done?token={{ token }}">
-            <input name="remark" placeholder="Remark (optional)" maxlength="500">
-            <button class="btn" type="submit">Work done</button>
-          </form>
-          {% endif %}
+          <div class="taskbar">
+            <form class="sched" method="post" action="/tasks/{{ t.id }}/schedule?token={{ token }}"
+                  title="Schedule this task for a date">
+              <input type="date" name="date" value="{{ t.scheduled_for }}"
+                     onchange="this.form.submit()">
+            </form>
+            {% if dept == 'admin' %}
+            <form class="assign" method="post" action="/tasks/{{ t.id }}/assign?token={{ token }}">
+              <select name="department" onchange="this.form.submit()"
+                      title="Assign to department">
+                {% if not t.department %}<option value="" selected>assign&hellip;</option>{% endif %}
+                {% for d in departments %}
+                <option value="{{ d }}" {% if t.department == d %}selected{% endif %}>{{ 'QC' if d == 'qc' else d|capitalize }}</option>
+                {% endfor %}
+              </select>
+            </form>
+            {% endif %}
+            {% if dept in ('admin', 'management') %}
+            <form method="post" action="/tasks/{{ t.id }}/done?token={{ token }}">
+              <button class="btn" type="submit">Done</button>
+            </form>
+            {% else %}
+            <form class="doneform" method="post" action="/tasks/{{ t.id }}/done?token={{ token }}">
+              <input name="remark" placeholder="Remark (optional)" maxlength="500">
+              <button class="btn" type="submit">Work done</button>
+            </form>
+            {% endif %}
+          </div>
         </div>
       {% endfor %}
       </div>
@@ -358,15 +372,17 @@
     <div class="fbody">
     {% for t in done_today %}
       <div class="task done">
-        <div class="grow">
-          <div class="req">{{ t.request }}</div>
-          <div class="meta">{{ t.client }}{% if dept in ('admin','management') and t.department %} &middot; {{ t.department }}{% endif %}</div>
-          {% if t.remark %}<div class="remark"><b>Remark:</b> {{ t.remark }}{% if t.done_by %} &middot; {{ t.done_by }}{% endif %}</div>
-          {% elif t.done_by %}<div class="remark">{{ t.done_by }}</div>{% endif %}
+        <div class="tasktop">
+          <div class="grow">
+            <div class="req">{{ t.request|clean }}</div>
+            <div class="meta">{{ t.client }}{% if dept in ('admin','management') and t.department %} &middot; {{ t.department }}{% endif %}</div>
+            {% if t.remark %}<div class="remark"><b>Remark:</b> {{ t.remark }}{% if t.done_by %} &middot; {{ t.done_by }}{% endif %}</div>
+            {% elif t.done_by %}<div class="remark">{{ t.done_by }}</div>{% endif %}
+          </div>
+          <form method="post" action="/tasks/{{ t.id }}/reopen?token={{ token }}">
+            <button class="btn" type="submit">Reopen</button>
+          </form>
         </div>
-        <form method="post" action="/tasks/{{ t.id }}/reopen?token={{ token }}">
-          <button class="btn" type="submit">Reopen</button>
-        </form>
       </div>
     {% endfor %}
     </div>
@@ -382,12 +398,14 @@
     <div class="fbody">
     {% for t in archive %}
       <div class="task done">
-        <div class="grow">
-          <div class="req">{{ t.request }}</div>
-          <div class="meta">{{ t.client }} &middot; {{ t.created_at[:10] }}</div>
-          {% if t.remark %}<div class="remark"><b>Remark:</b> {{ t.remark }}{% if t.done_by %} &middot; {{ t.done_by }}{% endif %}</div>{% endif %}
+        <div class="tasktop">
+          <div class="grow">
+            <div class="req">{{ t.request|clean }}</div>
+            <div class="meta">{{ t.client }} &middot; {{ t.created_at[:10] }}</div>
+            {% if t.remark %}<div class="remark"><b>Remark:</b> {{ t.remark }}{% if t.done_by %} &middot; {{ t.done_by }}{% endif %}</div>{% endif %}
+          </div>
+          <span class="pill {{ t.status }}">{{ t.status.replace('_',' ') }}</span>
         </div>
-        <span class="pill {{ t.status }}">{{ t.status.replace('_',' ') }}</span>
       </div>
     {% endfor %}
     </div>
