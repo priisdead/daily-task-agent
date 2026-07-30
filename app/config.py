@@ -119,6 +119,11 @@ SHEET_RISK_DAYS = int(os.getenv("SHEET_RISK_DAYS", "2"))
 SHEET_RISK_MIN_PENDING = int(os.getenv("SHEET_RISK_MIN_PENDING", "100"))
 SHEET_RISK_LOOKBACK_DAYS = int(os.getenv("SHEET_RISK_LOOKBACK_DAYS", "7"))
 
+# ── Database connection pool ─────────────────────────────────────────────────
+# A remote Postgres charges a TLS handshake per new connection; the pool keeps
+# a few warm. Render's free/starter instances are small, so keep this modest.
+DB_POOL_MAX = int(os.getenv("DB_POOL_MAX", "5"))
+
 # ── Stage-tracking sheet sync (Dragpal ji's 26-stage tracking sheet).
 # Uses the same SHEETS_API_KEY. Empty TRACK_SHEET_ID = off.
 TRACK_SHEET_ID = os.getenv("TRACK_SHEET_ID", "")

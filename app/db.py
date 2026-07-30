@@ -142,6 +142,23 @@ CREATE TABLE IF NOT EXISTS users (
 );
 """
 
+# Indexes live outside SCHEMA and run one-by-one AFTER the column migrations:
+# an index on a column a legacy database hasn't got yet would otherwise abort
+# the whole schema batch and stop the app from starting.
+INDEXES = (
+    "CREATE INDEX IF NOT EXISTS ix_tasks_status     ON tasks (status)",
+    "CREATE INDEX IF NOT EXISTS ix_tasks_dept       ON tasks (department)",
+    "CREATE INDEX IF NOT EXISTS ix_tasks_updated    ON tasks (updated_at)",
+    "CREATE INDEX IF NOT EXISTS ix_tasks_po         ON tasks (po_number)",
+    "CREATE INDEX IF NOT EXISTS ix_tasks_close_at   ON tasks (close_at)",
+    "CREATE INDEX IF NOT EXISTS ix_emails_processed ON emails (processed)",
+    "CREATE INDEX IF NOT EXISTS ix_emails_ts        ON emails (ts)",
+    "CREATE INDEX IF NOT EXISTS ix_wa_processed     ON wa_messages (processed)",
+    "CREATE INDEX IF NOT EXISTS ix_prod_po          ON production_rows (po_number)",
+    "CREATE INDEX IF NOT EXISTS ix_track_po         ON tracking_rows (po_number)",
+    "CREATE INDEX IF NOT EXISTS ix_events_created   ON events (created_at)",
+)
+
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -152,9 +169,49 @@ def _q(sql: str) -> str:
     return sql.replace("?", "%s") if IS_PG else sql
 
 
+# A remote Postgres (Neon) charges a TLS handshake for every new connection —
+# roughly 100-400ms. A page that runs four queries used to pay that four
+# times before doing any work. The pool keeps connections warm and reuses
+# them, so the handshake is paid once per worker instead of once per query.
+_pool = None
+_pool_broken = False
+
+
+def _get_pool():
+    """Lazily build the connection pool. If psycopg_pool isn't installed we
+    fall back to plain connections so the app still runs."""
+    global _pool, _pool_broken
+    if _pool is not None or _pool_broken:
+        return _pool
+    try:
+        from psycopg_pool import ConnectionPool
+        _pool = ConnectionPool(
+            config.DATABASE_URL,
+            min_size=1,
+            max_size=config.DB_POOL_MAX,
+            kwargs={"row_factory": dict_row},
+            # a pooled connection idle longer than this is recycled, which
+            # also survives Neon suspending its compute
+            max_idle=120,
+            timeout=30,
+            open=True,
+        )
+    except Exception:  # pragma: no cover - falls back to direct connections
+        _pool_broken = True
+        _pool = None
+    return _pool
+
+
 @contextmanager
 def get_db():
     if IS_PG:
+        pool = _get_pool()
+        if pool is not None:
+            # the pool's context manager commits on clean exit and returns
+            # the connection to the pool instead of closing it
+            with pool.connection() as conn:
+                yield conn
+            return
         conn = psycopg.connect(config.DATABASE_URL, row_factory=dict_row)
     else:
         conn = sqlite3.connect(config.DATABASE_PATH)
@@ -192,6 +249,13 @@ def init_db() -> None:
                 db.execute(f"ALTER TABLE tasks ADD COLUMN {_col} TEXT DEFAULT ''")
         except Exception:
             pass  # column already there
+    # Indexes last, each isolated: a failure here must never block startup.
+    for _ix in INDEXES:
+        try:
+            with get_db() as db:
+                db.execute(_ix)
+        except Exception:
+            pass
 
 
 def _rows(result) -> list:
