@@ -256,6 +256,24 @@ def init_db() -> None:
                 db.execute(_ix)
         except Exception:
             pass
+    # Say plainly whether the optional columns are present. A silent migration
+    # failure used to surface much later as a 500 on the Done button.
+    import logging as _lg
+    try:
+        with get_db() as db:
+            cur = db.execute("SELECT * FROM tasks LIMIT 0")
+            cols = {d[0] for d in (cur.description or [])}
+        missing = [c for c in ("close_why", "close_quote", "close_conf",
+                               "close_at", "scheduled_for", "po_number")
+                   if c not in cols]
+        if missing:
+            _lg.getLogger("db").warning(
+                "tasks table is MISSING columns %s — features using them will "
+                "degrade gracefully; see /debug/tables", missing)
+        else:
+            _lg.getLogger("db").info("tasks schema complete (all columns present)")
+    except Exception:
+        _lg.getLogger("db").exception("could not inspect tasks columns")
 
 
 def _rows(result) -> list:
@@ -329,21 +347,39 @@ def set_task_department(task_id: int, department: str) -> None:
 
 def set_task_status(task_id: int, status: str, remark: str | None = None,
                     done_by: str | None = None) -> None:
-    sets = ["status = ?", "updated_at = ?"]
-    vals: list = [status, utcnow()]
-    if status in ("done", "open"):
-        # the suggestion has been acted on (or the task reopened) — retire it
-        sets += ["close_why = ''", "close_quote = ''", "close_conf = ''",
-                 "close_at = ''"]
-    if remark is not None and remark.strip():
-        sets.append("remark = ?")
-        vals.append(remark.strip()[:500])
-    if done_by:
-        sets.append("done_by = ?")
-        vals.append(done_by[:200])
-    vals.append(task_id)
+    """Closing a task must NEVER fail. If the optional closure-suggestion
+    columns are missing (e.g. a database restored from an older schema), fall
+    back to the plain update rather than 500-ing on the Done button."""
+    import logging as _lg
+
+    def _build(with_close: bool):
+        sets = ["status = ?", "updated_at = ?"]
+        vals: list = [status, utcnow()]
+        if with_close and status in ("done", "open"):
+            # the suggestion has been acted on (or the task reopened) — retire it
+            sets += ["close_why = ''", "close_quote = ''", "close_conf = ''",
+                     "close_at = ''"]
+        if remark is not None and remark.strip():
+            sets.append("remark = ?")
+            vals.append(remark.strip()[:500])
+        if done_by:
+            sets.append("done_by = ?")
+            vals.append(done_by[:200])
+        vals.append(task_id)
+        return _q(f"UPDATE tasks SET {', '.join(sets)} WHERE id = ?"), vals
+
+    sql, vals = _build(True)
+    try:
+        with get_db() as db:
+            db.execute(sql, vals)
+        return
+    except Exception as exc:
+        _lg.getLogger("db").warning(
+            "set_task_status full update failed (%s) — retrying without the "
+            "closure columns", str(exc)[:160])
+    sql, vals = _build(False)
     with get_db() as db:
-        db.execute(_q(f"UPDATE tasks SET {', '.join(sets)} WHERE id = ?"), vals)
+        db.execute(sql, vals)
 
 
 def mark_processed(table: str, ids: list) -> None:
@@ -677,6 +713,17 @@ def open_tasks() -> list:
             " ORDER BY client, id"))
 
 
+def has_close_columns() -> bool:
+    """True when the closure-suggestion columns exist (they are added by a
+    migration, so a freshly restored database may briefly lack them)."""
+    try:
+        with get_db() as db:
+            db.execute("SELECT close_at FROM tasks LIMIT 1")
+        return True
+    except Exception:
+        return False
+
+
 def suggest_close(task_id: int, why: str, quote: str, conf: str) -> None:
     """File the AI's 'this looks done' reading against a task, with the
     evidence, so a human can confirm it without reopening the mailbox."""
@@ -700,6 +747,8 @@ def clear_close_suggestion(task_id: int) -> None:
 
 def ready_to_close(department: str = "") -> list:
     """Open/in-progress tasks the AI believes are finished, newest first."""
+    if not has_close_columns():
+        return []
     sql = ("SELECT * FROM tasks WHERE status IN ('open', 'in_progress')"
            " AND close_at <> ''")
     params: list = []
@@ -776,6 +825,43 @@ def _cached_last_run(db) -> dict | None:
     rows = _rows(db.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 1"))
     _last_run_cache.update(row=rows[0] if rows else None, at=now, set=True)
     return _last_run_cache["row"]
+
+
+TABLES = ("tasks", "emails", "wa_messages", "production_rows", "tracking_rows",
+          "purchase_orders", "users", "events", "runs", "skipped_msgs")
+
+
+def table_counts() -> dict:
+    """Row count per table, plus the newest id in the busy ones — enough to
+    prove a migration or a restore brought everything across."""
+    out: dict = {}
+    with get_db() as db:
+        for t in TABLES:
+            try:
+                rows = _rows(db.execute(f"SELECT COUNT(*) AS n FROM {t}"))
+                out[t] = rows[0]["n"] if rows else 0
+            except Exception as exc:
+                out[t] = f"error: {str(exc)[:80]}"
+        for t in ("tasks", "emails"):
+            try:
+                rows = _rows(db.execute(f"SELECT MAX(id) AS m FROM {t}"))
+                out[f"{t}_max_id"] = (rows[0]["m"] if rows else None) or 0
+            except Exception:
+                pass
+        # which columns does `tasks` actually have? A restored database can
+        # be missing ones a migration was meant to add.
+        try:
+            cur = db.execute("SELECT * FROM tasks LIMIT 0")
+            cols = [d[0] for d in (cur.description or [])]
+            out["tasks_columns"] = cols
+            missing = [c for c in ("close_why", "close_quote", "close_conf",
+                                   "close_at", "scheduled_for", "po_number",
+                                   "remark", "done_by", "department")
+                       if c not in cols]
+            out["missing_columns"] = missing or "none"
+        except Exception as exc:
+            out["tasks_columns"] = f"error: {str(exc)[:80]}"
+    return out
 
 
 def dashboard_data(today_prefix: str, want_archive: bool, archive_limit: int = 60) -> dict:

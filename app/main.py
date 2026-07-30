@@ -126,6 +126,18 @@ async def _timing(request: Request, call_next):
     return response
 
 
+@app.get("/debug/tables")
+async def debug_tables(request: Request, token: str = Query("")):
+    """Row counts for every table in the database the app is CURRENTLY using.
+    Compare with the old database (or a backup's MANIFEST.json) to confirm a
+    migration brought everything across."""
+    _check_token(request, token)
+    counts = await asyncio.to_thread(db.table_counts)
+    return {"database": "postgres" if db.IS_PG else "sqlite",
+            "counts": counts,
+            "note": "compare these numbers with the source database"}
+
+
 @app.get("/debug/timing")
 async def debug_timing(request: Request, token: str = Query("")):
     """Where do the seconds actually go? Times each layer separately so we
