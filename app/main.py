@@ -110,6 +110,101 @@ async def healthz():
     return {"ok": True}
 
 
+@app.middleware("http")
+async def _timing(request: Request, call_next):
+    """Measure how long the SERVER took, so slow pages can be attributed to
+    the server or to the network instead of guessed at. Read it in the
+    browser's Network tab: response header `Server-Timing: app;dur=123`."""
+    import time as _t
+    t0 = _t.perf_counter()
+    response = await call_next(request)
+    ms = (_t.perf_counter() - t0) * 1000
+    response.headers["Server-Timing"] = f"app;dur={ms:.0f}"
+    response.headers["X-Process-Time-Ms"] = f"{ms:.0f}"
+    if ms > 1000:
+        log.warning("SLOW %s %s took %.0f ms", request.method, request.url.path, ms)
+    return response
+
+
+@app.get("/debug/timing")
+async def debug_timing(request: Request, token: str = Query("")):
+    """Where do the seconds actually go? Times each layer separately so we
+    can tell a sleeping database from a slow query from slow rendering."""
+    _check_token(request, token)
+    import time as _t
+
+    def _ms(fn):
+        t0 = _t.perf_counter()
+        try:
+            fn()
+            err = None
+        except Exception as exc:                       # report, don't raise
+            err = str(exc)[:200]
+        return round((_t.perf_counter() - t0) * 1000, 1), err
+
+    def _connect_only():
+        with db.get_db() as conn:
+            conn.execute("SELECT 1")
+
+    # cold-ish first touch, then a warm one: a big gap means the database
+    # (or the pool) was asleep and the first query paid the wake-up cost
+    first_ms, first_err = _ms(_connect_only)
+    warm_ms, _ = _ms(_connect_only)
+    bundle_ms, bundle_err = _ms(
+        lambda: db.dashboard_data(datetime.utcnow().date().isoformat(), False))
+    tasks_ms, _ = _ms(db.open_tasks)
+    prod_ms, _ = _ms(db.production_all)
+
+    bundle = await asyncio.to_thread(
+        db.dashboard_data, datetime.utcnow().date().isoformat(), False)
+    by_client: dict[str, list] = {}
+    for t in bundle["open"]:
+        by_client.setdefault(t["client"] or "Unknown", []).append(t)
+    tmpl = templates.get_template("dashboard.html")
+    ctx = {"request": request, "token": token, "dept": "admin",
+           "departments": config.DEPARTMENTS, "user_email": "", "q": "", "po": "",
+           "merged": "", "view": "client", "n_client": len(bundle["open"]),
+           "n_internal": 0, "review": [], "n_review": 0, "n_review_high": 0,
+           "closed": "", "date_str": "", "by_client": by_client,
+           "open_count": len(bundle["open"]), "progress_count": 0,
+           "done_today": bundle["done_today"], "archive": [],
+           "n_archive": bundle["n_archive"], "show_archive": False,
+           "last_run": bundle["last_run"]}
+    t0 = _t.perf_counter()
+    html = tmpl.render(**ctx)
+    render_ms = round((_t.perf_counter() - t0) * 1000, 1)
+
+    return {
+        "database": {
+            "backend": "postgres" if db.IS_PG else "sqlite",
+            "pool_active": db._pool is not None,
+            "pool_fell_back": db._pool_broken,
+            "first_query_ms": first_ms,
+            "warm_query_ms": warm_ms,
+            "wake_up_cost_ms": round(max(0.0, first_ms - warm_ms), 1),
+            "error": first_err or bundle_err,
+        },
+        "queries": {
+            "dashboard_bundle_ms": bundle_ms,
+            "open_tasks_ms": tasks_ms,
+            "production_all_ms": prod_ms,
+        },
+        "render": {
+            "template_ms": render_ms,
+            "html_kb": round(len(html.encode()) / 1024, 1),
+            "open_tasks": len(bundle["open"]),
+        },
+        "how_to_read": (
+            "wake_up_cost_ms high (>500) = the database was asleep (Neon free "
+            "tier suspends after ~5 min idle). warm_query_ms high (>150) = the "
+            "app and database are far apart, or the instance is CPU-starved. "
+            "template_ms high (>300) = too much HTML. If all of these are small "
+            "but the browser still shows seconds, the time is network/host: "
+            "compare with the Server-Timing header on the real page."
+        ),
+    }
+
+
 # ── Meta webhook ─────────────────────────────────────────────────────────────
 
 @app.get("/webhook")
