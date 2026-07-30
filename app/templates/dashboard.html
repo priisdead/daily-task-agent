@@ -7,8 +7,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Today — Task Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap');
   :root {
     --bg: #FAF9F7; --surface: #FFFFFF; --ink: #1B1D1F; --ink-2: #5C6166;
     --ink-3: #9AA0A6; --line: #ECEAE6; --accent: #14634E; --accent-ink: #0E4A3A;
@@ -23,7 +26,7 @@
   }
   * { box-sizing: border-box; margin: 0; }
   body { background: var(--bg); color: var(--ink);
-    font: 400 15px/1.6 "Inter", -apple-system, "Segoe UI", sans-serif;
+    font: 400 15px/1.6 "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased; }
   .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px 80px; }
 
@@ -455,11 +458,20 @@
   </details>
   {% endif %}
 
+  {% if n_archive and not show_archive %}
+  <div class="scanline" style="margin-top:34px">
+    <a href="/?token={{ token }}&view={{ view }}&archive=1"
+       style="color:var(--accent);font-weight:600;text-decoration:none">
+      Show earlier tasks ({{ n_archive }}) &rarr;</a>
+    <span style="margin-left:8px">kept out of this page so it loads fast</span>
+  </div>
+  {% endif %}
+
   {% if archive %}
-  <details class="folder">
+  <details class="folder" open>
     <summary>
       <span class="fname">Earlier tasks</span>
-      <span class="fcount">{{ archive|length }}</span>
+      <span class="fcount">{{ archive|length }}{% if n_archive > archive|length %} of {{ n_archive }}{% endif %}</span>
     </summary>
     <div class="fbody">
     {% for t in archive %}

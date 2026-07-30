@@ -97,6 +97,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="WhatsApp + Email Task Agent", lifespan=lifespan)
 
+# Task pages are text-heavy HTML; without compression a busy list was going
+# out at ~500 KB, which is seconds of transfer on a phone or office link.
+from fastapi.middleware.gzip import GZipMiddleware  # noqa: E402
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+@app.get("/healthz")
+async def healthz():
+    """Cheap liveness check — no database work. Point an uptime pinger here
+    to stop a free-tier host from sleeping (which also stops the scheduler)."""
+    return {"ok": True}
+
 
 # ── Meta webhook ─────────────────────────────────────────────────────────────
 
@@ -177,7 +189,7 @@ def _is_internal(t: dict) -> bool:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, token: str = Query(""), q: str = Query(""), po: str = Query(""), merged: str = Query(""), view: str = Query("client"), closed: str = Query("")):
+async def dashboard(request: Request, token: str = Query(""), q: str = Query(""), po: str = Query(""), merged: str = Query(""), view: str = Query("client"), closed: str = Query(""), archive: int = Query(0)):
     try:
         dept = _dept_for(request, token)
     except HTTPException:
@@ -187,26 +199,29 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
     today = datetime.now(tz)
     query = q.strip().lower()
     po_filter = po.strip().upper()
-    tasks = db.open_tasks()
-    done_today = db.tasks_done_today(datetime.utcnow().date().isoformat())
-    active_ids = {t["id"] for t in tasks} | {t["id"] for t in done_today}
-    archive = [t for t in db.all_tasks() if t["id"] not in active_ids]
+    # one connection, and the finished-task archive only when asked for
+    bundle = await asyncio.to_thread(
+        db.dashboard_data, datetime.utcnow().date().isoformat(), bool(archive))
+    tasks = bundle["open"]
+    done_today = bundle["done_today"]
+    archive_rows = bundle["archive"]
+    n_archive = bundle["n_archive"]
     if dept not in ("admin", "management"):
         # department credential: only this department's tasks.
         # (management is oversight — sees every department's tasks,
         # but has no admin pages/controls)
         tasks = [t for t in tasks if (t.get("department") or "") == dept]
         done_today = [t for t in done_today if (t.get("department") or "") == dept]
-        archive = [t for t in archive if (t.get("department") or "") == dept]
+        archive_rows = [t for t in archive_rows if (t.get("department") or "") == dept]
     if po_filter:
         # Filter by PO number (from production page deep-link)
         tasks = [t for t in tasks if (t.get("po_number") or "").upper() == po_filter]
         done_today = [t for t in done_today if (t.get("po_number") or "").upper() == po_filter]
-        archive = [t for t in archive if (t.get("po_number") or "").upper() == po_filter]
+        archive_rows = [t for t in archive_rows if (t.get("po_number") or "").upper() == po_filter]
     if query:
         tasks = [t for t in tasks if _matches(t, query)]
         done_today = [t for t in done_today if _matches(t, query)]
-        archive = [t for t in archive if _matches(t, query)]
+        archive_rows = [t for t in archive_rows if _matches(t, query)]
     # Everyone works in two sections: client tasks (mail/WhatsApp) and
     # internal tasks (raised by the factory-sheet syncs / assigned from the
     # Team page). A PO deep-link ignores the split so nothing hides.
@@ -223,7 +238,7 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
         want_internal = view == "internal"
         tasks = [t for t in tasks if _is_internal(t) == want_internal]
         done_today = [t for t in done_today if _is_internal(t) == want_internal]
-        archive = [t for t in archive if _is_internal(t) == want_internal]
+        archive_rows = [t for t in archive_rows if _is_internal(t) == want_internal]
     if view == "review":
         tasks = []          # the review tab renders its own list
     by_client: dict[str, list] = {}
@@ -261,8 +276,10 @@ async def dashboard(request: Request, token: str = Query(""), q: str = Query("")
             "open_count": sum(1 for t in tasks if t["status"] == "open"),
             "progress_count": sum(1 for t in tasks if t["status"] == "in_progress"),
             "done_today": done_today,
-            "archive": archive,
-            "last_run": db.last_run(),
+            "archive": archive_rows,
+            "n_archive": n_archive,
+            "show_archive": bool(archive),
+            "last_run": bundle["last_run"],
         },
     )
 

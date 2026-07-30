@@ -760,6 +760,36 @@ def tasks_done_today(today_prefix: str) -> list:
                " ORDER BY updated_at DESC"), (today_prefix + "%",)))
 
 
+def dashboard_data(today_prefix: str, want_archive: bool, archive_limit: int = 60) -> dict:
+    """Everything the Tasks page needs, on ONE pooled connection instead of
+    four. The archive is only fetched when the user asks for it — rendering
+    500 finished tasks into every page load was most of the payload."""
+    with get_db() as db:
+        open_rows = _rows(db.execute(
+            "SELECT * FROM tasks WHERE status IN ('open', 'in_progress')"
+            " ORDER BY client, id"))
+        done_rows = _rows(db.execute(
+            _q("SELECT * FROM tasks WHERE status = 'done' AND updated_at LIKE ?"
+               " ORDER BY updated_at DESC"), (today_prefix + "%",)))
+        active_ids = {t["id"] for t in open_rows} | {t["id"] for t in done_rows}
+        archive_rows: list = []
+        n_archive = 0
+        cnt = _rows(db.execute("SELECT COUNT(*) AS n FROM tasks"))
+        n_archive = max(0, (cnt[0]["n"] if cnt else 0) - len(active_ids))
+        if want_archive:
+            archive_rows = [
+                t for t in _rows(db.execute(
+                    _q("SELECT * FROM tasks ORDER BY id DESC LIMIT ?"),
+                    (archive_limit + len(active_ids),)))
+                if t["id"] not in active_ids
+            ][:archive_limit]
+        runs = _rows(db.execute(
+            "SELECT * FROM runs ORDER BY id DESC LIMIT 1"))
+    return {"open": open_rows, "done_today": done_rows,
+            "archive": archive_rows, "n_archive": n_archive,
+            "last_run": runs[0] if runs else None}
+
+
 def all_tasks(limit: int = 500) -> list:
     with get_db() as db:
         return _rows(db.execute(_q("SELECT * FROM tasks ORDER BY id DESC LIMIT ?"), (limit,)))

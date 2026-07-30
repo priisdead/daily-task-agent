@@ -5,8 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#14634E">
 <title>Calendar — Task Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap');
   :root { --bg:#FAF9F7; --surface:#fff; --ink:#1B1D1F; --ink-2:#5C6166;
     --ink-3:#9AA0A6; --line:#ECEAE6; --accent:#14634E; --amber:#9A5B00; --red:#B3261E; }
   @media (prefers-color-scheme: dark) {
@@ -14,7 +17,7 @@
       --ink-3:#6E7479; --line:#2A2E32; --accent:#3ECF9A; --amber:#E8A94C; --red:#F2887F; } }
   * { box-sizing:border-box; margin:0; }
   body { background:var(--bg); color:var(--ink);
-    font:400 14px/1.55 "Inter",-apple-system,"Segoe UI",sans-serif; }
+    font:400 14px/1.55 "Inter",system-ui,-apple-system,"Segoe UI",sans-serif; }
   .wrap { max-width:860px; margin:0 auto; padding:0 20px 80px; }
   .topbar { display:flex; justify-content:space-between; align-items:center;
     padding:26px 0 0; flex-wrap:wrap; gap:10px; }
