@@ -760,22 +760,51 @@ def tasks_done_today(today_prefix: str) -> list:
                " ORDER BY updated_at DESC"), (today_prefix + "%",)))
 
 
+# The scan summary line changes once an hour at most, so it does not deserve
+# a database round trip on every page view.
+_last_run_cache: dict = {"at": 0.0, "row": None, "set": False}
+_LAST_RUN_TTL = 60.0
+
+
+def _cached_last_run(db) -> dict | None:
+    """Cache the answer even when it is 'no runs yet' — otherwise a fresh
+    install re-queries on every page view."""
+    import time as _t
+    now = _t.monotonic()
+    if _last_run_cache["set"] and now - _last_run_cache["at"] < _LAST_RUN_TTL:
+        return _last_run_cache["row"]
+    rows = _rows(db.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 1"))
+    _last_run_cache.update(row=rows[0] if rows else None, at=now, set=True)
+    return _last_run_cache["row"]
+
+
 def dashboard_data(today_prefix: str, want_archive: bool, archive_limit: int = 60) -> dict:
-    """Everything the Tasks page needs, on ONE pooled connection instead of
-    four. The archive is only fetched when the user asks for it — rendering
-    500 finished tasks into every page load was most of the payload."""
+    """Everything the Tasks page needs in ONE round trip.
+
+    This matters far more than it looks: against a remote Postgres each
+    statement costs a full network round trip, so five queries on a distant
+    database is five times the latency. Open tasks, today's completions and
+    the total count now come back from a single statement and are split in
+    Python, which is free by comparison."""
+    like = today_prefix + "%"
     with get_db() as db:
-        open_rows = _rows(db.execute(
-            "SELECT * FROM tasks WHERE status IN ('open', 'in_progress')"
-            " ORDER BY client, id"))
-        done_rows = _rows(db.execute(
-            _q("SELECT * FROM tasks WHERE status = 'done' AND updated_at LIKE ?"
-               " ORDER BY updated_at DESC"), (today_prefix + "%",)))
-        active_ids = {t["id"] for t in open_rows} | {t["id"] for t in done_rows}
+        rows = _rows(db.execute(
+            _q("SELECT t.*, (SELECT COUNT(*) FROM tasks) AS _all_n FROM tasks t"
+               " WHERE t.status IN ('open', 'in_progress')"
+               "    OR (t.status = 'done' AND t.updated_at LIKE ?)"
+               " ORDER BY t.client, t.id"), (like,)))
+        if rows:
+            total = rows[0].get("_all_n") or 0
+        else:
+            cnt = _rows(db.execute("SELECT COUNT(*) AS n FROM tasks"))
+            total = cnt[0]["n"] if cnt else 0
+        for r in rows:
+            r.pop("_all_n", None)
+        open_rows = [r for r in rows if r["status"] != "done"]
+        done_rows = sorted((r for r in rows if r["status"] == "done"),
+                           key=lambda r: r.get("updated_at") or "", reverse=True)
+        active_ids = {r["id"] for r in rows}
         archive_rows: list = []
-        n_archive = 0
-        cnt = _rows(db.execute("SELECT COUNT(*) AS n FROM tasks"))
-        n_archive = max(0, (cnt[0]["n"] if cnt else 0) - len(active_ids))
         if want_archive:
             archive_rows = [
                 t for t in _rows(db.execute(
@@ -783,11 +812,11 @@ def dashboard_data(today_prefix: str, want_archive: bool, archive_limit: int = 6
                     (archive_limit + len(active_ids),)))
                 if t["id"] not in active_ids
             ][:archive_limit]
-        runs = _rows(db.execute(
-            "SELECT * FROM runs ORDER BY id DESC LIMIT 1"))
+        last = _cached_last_run(db)
     return {"open": open_rows, "done_today": done_rows,
-            "archive": archive_rows, "n_archive": n_archive,
-            "last_run": runs[0] if runs else None}
+            "archive": archive_rows,
+            "n_archive": max(0, total - len(active_ids)),
+            "last_run": last}
 
 
 def all_tasks(limit: int = 500) -> list:
