@@ -826,9 +826,13 @@ async def insights_page(request: Request, token: str = Query("")):
             po_counts[p["status"]] += 1
     po_total = sum(po_counts.values()) or 1
 
-    # Who is holding the most overdue factory stages (Team KRA sheet)
+    # Who is holding the most overdue factory stages (Team KRA sheet).
+    # Demo sessions read invented owners from the demo dataset instead.
+    _kra_src = _src(request)
+    _kra_rows = (_kra_src.team_pastdue() if hasattr(_kra_src, "team_pastdue")
+                 else sheets.team_pastdue())
     kra_by_owner: dict[str, dict] = {}
-    for r in sheets.team_pastdue():
+    for r in _kra_rows:
         o = kra_by_owner.setdefault(
             r["owner"], {"owner": r["owner"], "n": 0, "worst": 0, "pos": set()})
         o["n"] += 1
@@ -861,7 +865,9 @@ async def insights_page(request: Request, token: str = Query("")):
 async def cxo_dashboard(request: Request, token: str = Query(""), po: str = Query("")):
     """The CXO Production dashboard, hosted inside the agent behind login.
     Accepts ?po=... to open pre-filtered to one PO (deep link from the
-    Production page)."""
+    Production page). Never served to demo accounts — it renders live
+    factory data straight from the company's Google Sheet."""
+    _demo_guard(request)
     try:
         _production_access(request, token)
     except HTTPException as exc:
@@ -938,7 +944,7 @@ async def production_page(request: Request, token: str = Query("")):
     return templates.TemplateResponse(
         request, "production.html",
         {"token": token, "dept": dept, "b": buckets,
-         "configured": sheets.configured(),
+         "configured": _is_demo(request) or sheets.configured(),
          "last_sync": _src(request).production_last_sync(),
          "total": sum(len(v) for v in buckets.values())},
     )

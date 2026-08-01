@@ -123,7 +123,9 @@
       {% endif %}
       <span class="btn active">Production</span>
       <a class="btn" href="/team?token={{ token }}">Team</a>
+      {% if not demo %}
       <a class="btn" href="/dashboard?token={{ token }}" target="_blank">CXO Dashboard</a>
+      {% endif %}
       {% if dept == 'admin' %}
       <a class="btn primary" href="/sync-sheets?token={{ token }}&back=1">Sync now</a>
       {% endif %}
@@ -166,7 +168,7 @@
       {% if r.po_number %}
       <div class="links">
         {% if dept in ('admin','management','implementation') %}<a href="/orders/{{ r.po_number }}?token={{ token }}">Order</a>{% endif %}
-        <a href="/dashboard?token={{ token }}&po={{ r.po_number }}" target="_blank">Chart</a>
+        {% if not demo %}<a href="/dashboard?token={{ token }}&po={{ r.po_number }}" target="_blank">Chart</a>{% endif %}
       </div>
       {% endif %}
     </div>
@@ -194,7 +196,7 @@
       {% if r.po_number %}
       <div class="links">
         {% if dept in ('admin','management','implementation') %}<a href="/orders/{{ r.po_number }}?token={{ token }}">Order</a>{% endif %}
-        <a href="/dashboard?token={{ token }}&po={{ r.po_number }}" target="_blank">Chart</a>
+        {% if not demo %}<a href="/dashboard?token={{ token }}&po={{ r.po_number }}" target="_blank">Chart</a>{% endif %}
       </div>
       {% endif %}
     </div>
