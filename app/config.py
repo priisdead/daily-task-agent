@@ -124,6 +124,13 @@ SHEET_RISK_LOOKBACK_DAYS = int(os.getenv("SHEET_RISK_LOOKBACK_DAYS", "7"))
 # a few warm. Render's free/starter instances are small, so keep this modest.
 DB_POOL_MAX = int(os.getenv("DB_POOL_MAX", "5"))
 
+# ── Demo accounts ────────────────────────────────────────────────────────────
+# These logins see a generated dataset instead of the real database — for
+# portfolio/demo links. They can click anything; nothing reaches live data.
+DEMO_EMAILS = {e.strip().lower()
+               for e in os.getenv("DEMO_EMAILS", "demo@thesolfactory.com").split(",")
+               if e.strip()}
+
 # ── Stage-tracking sheet sync (Dragpal ji's 26-stage tracking sheet).
 # Uses the same SHEETS_API_KEY. Empty TRACK_SHEET_ID = off.
 TRACK_SHEET_ID = os.getenv("TRACK_SHEET_ID", "")

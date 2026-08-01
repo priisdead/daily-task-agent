@@ -60,10 +60,20 @@
     .btn { min-height: 40px; }
   }
 
+  .demobar { margin-top:14px; padding:10px 14px; border-radius:10px;
+    font:600 12.5px/1.45 "Inter",system-ui,sans-serif; letter-spacing:.01em;
+    color:#7A4B00; background:#FFF4DC; border:1px solid #F0D9A8; }
+  @media (prefers-color-scheme: dark) { .demobar {
+    color:#F5C86A; background:#2A2415; border-color:#4A3E22; } }
 </style>
 </head>
 <body>
 <div class="wrap">
+  {% if demo %}
+  <div class="demobar">Demo mode &middot; every name, order and message on this
+    page is generated sample data. Live actions are disabled.</div>
+  {% endif %}
+
   <div class="topbar">
     <span class="brand">Task Agent</span>
     <div class="inline">
