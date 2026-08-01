@@ -1201,7 +1201,12 @@ async def report_pdf(request: Request, token: str = Query(""), date: str = Query
 async def login_page(request: Request, error: str = Query("")):
     if _session_user(request):
         return RedirectResponse(url="/", status_code=302)
-    return templates.TemplateResponse(request, "login.html", {"error": error})
+    demo_user = next((db.get_user(e) for e in sorted(config.DEMO_EMAILS)
+                      if db.get_user(e)), None)
+    return templates.TemplateResponse(
+        request, "login.html",
+        {"error": error,
+         "demo_available": bool(demo_user and demo_user.get("active"))})
 
 
 @app.post("/login")
@@ -1213,6 +1218,25 @@ async def login_submit(request: Request):
     if not user or not user.get("active") or \
        not auth.verify_password(password, user.get("salt", ""), user.get("pass_hash", "")):
         return RedirectResponse(url="/login?error=Wrong+email+or+password",
+                                status_code=303)
+    resp = RedirectResponse(url="/", status_code=303)
+    resp.set_cookie(auth.SESSION_COOKIE, auth.make_session(email),
+                    max_age=auth.SESSION_TTL, httponly=True, samesite="lax",
+                    secure=(request.url.scheme == "https"))
+    return resp
+
+
+@app.post("/demo-login")
+@app.get("/demo-login")
+async def demo_login(request: Request):
+    """One click into the demo. The password never appears in the page — the
+    server signs the visitor in as the demo account directly. Only accounts
+    listed in DEMO_EMAILS can be entered this way, and those accounts read
+    generated sample data, never the real database."""
+    email = next((e for e in sorted(config.DEMO_EMAILS)
+                  if (db.get_user(e) or {}).get("active")), None)
+    if not email:
+        return RedirectResponse(url="/login?error=Demo+is+not+available",
                                 status_code=303)
     resp = RedirectResponse(url="/", status_code=303)
     resp.set_cookie(auth.SESSION_COOKIE, auth.make_session(email),

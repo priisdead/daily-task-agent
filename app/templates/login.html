@@ -35,6 +35,16 @@
     cursor:pointer; }
   button:hover { opacity:.92; }
   .err { margin-top:16px; color:var(--red); font-size:13.5px; }
+  /* demo entry: secondary to the real sign-in, but easy to find */
+  .or { display:flex; align-items:center; gap:12px; margin:22px 0 4px;
+    color:var(--ink-3); font-size:12px; }
+  .or::before, .or::after { content:""; flex:1; height:1px; background:var(--line); }
+  button.demo { background:none; color:var(--accent); border:1px solid var(--accent);
+    margin-top:12px; font-weight:600; }
+  button.demo:hover { background:color-mix(in srgb, var(--accent) 8%, transparent);
+    opacity:1; }
+  .demonote { margin-top:10px; font-size:12.5px; color:var(--ink-3); text-align:center;
+    line-height:1.5; }
 </style>
 </head>
 <body>
@@ -48,6 +58,15 @@
     <input id="password" name="password" type="password" autocomplete="current-password" required>
     <button type="submit">Sign in</button>
     {% if error %}<div class="err">{{ error }}</div>{% endif %}
+
+    {% if demo_available %}
+    <div class="or">or</div>
+    <button class="demo" type="submit" formaction="/demo-login" formnovalidate>
+      Try the demo &rarr;
+    </button>
+    <div class="demonote">Opens the full product with generated sample data.
+      No real company information, and live actions are disabled.</div>
+    {% endif %}
   </form>
 </body>
 </html>
